@@ -1,0 +1,47 @@
+# Security
+
+## Supported versions
+
+Fixes go into the newest release only.
+
+## Reporting a vulnerability
+
+Report vulnerabilities privately through GitHub: on this repository, open **Security → Report a vulnerability**. Do not open a public issue. Include the plugin version, the OpenCode version and the steps to reproduce. Do not include tokens, client secrets or Slack content.
+
+## Data handling
+
+### What the plugin does
+
+The plugin is configuration and status code. It makes no network requests, defines no tools and never reads your Slack tokens. When OpenCode loads it, it:
+
+- adds Slack's hosted MCP server, `https://mcp.slack.com/mcp`, to OpenCode with your Slack app's OAuth client;
+- without `oauth.client_id` in its options, adds **Slack app** to `/connect` and reads that entry (the client ID and an optional client secret) from OpenCode's credential store;
+- adds default `ask` permission rules to each agent;
+- registers `/slack-status`, the status RPC, the TUI `/slack` dialog and the `slack-search` skill.
+
+OpenCode does everything else. It connects to Slack over HTTPS, runs the OAuth sign-in (PKCE for public apps), stores the credential outside your project config, refreshes it, and asks before tool calls according to your permission rules. `opencode mcp logout slack` deletes the Slack sign-in, and `opencode auth logout slack-app` deletes the saved client.
+
+The client ID is public. A client secret is needed only for apps without PKCE. Give it in the `/connect` **Slack app** entry, where OpenCode stores it in its credential store (the field is not masked while you type), or through `{env:NAME}` in the options; never as text in a config file. Status reports only that a secret is set, never its value.
+
+### Data flow
+
+- **To Slack:** each tool call with the arguments the agent chose, sent with your Slack user token. OpenCode also sends the session ID in the call's `_meta["ai.opencode/sessionID"]` field. The session ID is an opaque correlation value, not a credential, and Slack may log or keep it.
+- **To your model provider:** the Slack tool descriptions and schemas the agent looks up, and every Slack result the agent reads: messages, threads, profiles, canvases and files. Slack's tool descriptions include the signed-in user's Slack user ID, so the provider receives that ID too.
+- **On your machine:** OpenCode keeps session history, including Slack results. When a tool result exceeds the output limit (by default 2,000 lines or 50 KiB), OpenCode shortens it for the model and saves the full text locally.
+- **At Slack:** Slack records MCP activity in its [audit logs](https://docs.slack.dev/reference/audit-logs-api/methods-actions-reference#mcp-server), which workspace admins can review.
+
+Your Slack token acts as you. Agents can reach everything that you can see and that the granted scopes allow. The default scopes are read-only and cover public channels and user profiles. Add more scopes only when you need them.
+
+### Slack content is untrusted
+
+Other people write Slack messages, files, canvases, profiles and channel topics. They can contain text that tries to direct an agent (prompt injection). The `slack-search` skill tells agents to treat Slack content as data and never follow instructions in it. That reduces the risk but does not remove it.
+
+The default rules ask before writes, private search, file reads and unknown tools. Injected text therefore cannot make a covered agent post to Slack without your approval. Reads run without asking, so anything an agent reads reaches your model provider. With Code Mode, one program can make many read calls.
+
+## Permissions
+
+- **Some agents get no default rules.** Agents defined only in your config (non-built-in `agents.<id>` entries and Markdown agent files), and agents added by plugins that load after this one, are created after the plugin adds its rules. They run Slack writes and unknown tools without asking. `/slack-status` lists them in its `Agents without default rules` row. The [README](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/README.md#agents-without-the-default-rules) gives the fix: put the default block first in that agent's own `permissions`, followed by your top-level rules for Slack actions. Never put the block in the top-level `permissions`, where it would loosen Explore.
+- **Saved approvals are project-wide.** An "Always allow" answer is saved for the whole project and applies to every agent in it, Plan included. A directory with no git commit belongs to OpenCode's shared `global` project, so an approval saved there applies in every such directory. Review saved approvals and remove the ones you no longer need.
+- **The `slack_*` rule matches other servers.** The plugin's catch-all rule also matches tools of any other MCP server whose name starts with `slack_`. Those tools then ask instead of running. The rule never allows them.
+- **Deny is final.** A configured `deny` rule wins over every `ask`, `allow` and saved approval. Use `deny` for anything that must never run, including in non-interactive runs, because a client that approves prompts automatically still cannot pass a deny.
+- **Approval is not a Slack permission.** Approving a write in OpenCode does not grant its Slack scope. Without the scope, the call fails at Slack.

@@ -1,0 +1,59 @@
+{
+  "name": "@joe-broadhead/opencode-slack",
+  "version": "0.0.0",
+  "description": "Unofficial OpenCode plugin for Slack",
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "slack"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joe-broadhead/opencode-slack.git"
+  },
+  "homepage": "https://github.com/joe-broadhead/opencode-slack#readme",
+  "bugs": {
+    "url": "https://github.com/joe-broadhead/opencode-slack/issues"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./tui": "./dist/tui.js"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "opencode": {
+    "host": ">=2.2.3 <2.3.0"
+  },
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "bun test test/unit",
+    "test:tui": "bun test test/tui",
+    "test:host": "bun test test/host",
+    "test:pack": "bun test test/pack",
+    "check": "npm run typecheck && npm run build && npm test && npm run test:tui && npm run test:host && npm run test:pack"
+  },
+  "devDependencies": {
+    "@babel/core": "7.29.7",
+    "@babel/preset-typescript": "7.27.1",
+    "@opencode/client": "2.2.3",
+    "@opencode/plugin": "2.2.3",
+    "@opencode/sdk": "2.2.3",
+    "@opencode/util": "2.2.3",
+    "@opentui/core": "0.8.0",
+    "@opentui/solid": "0.8.0",
+    "@types/babel__core": "7.20.5",
+    "@types/bun": "1.4.3",
+    "babel-preset-solid": "1.9.16",
+    "esbuild": "0.28.2",
+    "solid-js": "1.9.17",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "display_information": {
+    "name": "OpenCode",
+    "description": "Lets OpenCode search and read Slack on your behalf through Slack's MCP server."
+  },
+  "oauth_config": {
+    "redirect_urls": [
+      "http://localhost:8765/callback"
+    ],
+    "scopes": {
+      "user": [
+        "channels:history",
+        "channels:read",
+        "search:read.public",
+        "users:read"
+      ]
+    },
+    "pkce_enabled": true
+  },
+  "settings": {
+    "token_rotation_enabled": false,
+    "is_mcp_enabled": true
+  }
+}

@@ -1,0 +1,98 @@
+# Publishes a v* tag to npm after the release environment is approved. It refuses a private package or a tag
+# that differs from the version, checks the tagged tree, packs it once, tests that tarball, and publishes it with
+# npm trusted publishing (OIDC) and provenance. A version already on npm is skipped, so a rerun is safe.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: release
+    permissions:
+      contents: read
+      id-token: write # trusted publishing and provenance
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # First, before anything is installed or built. `npm publish --dry-run` does not refuse a private
+      # package, so the workflow checks package.json itself.
+      - name: Refuse a private package or a tag that differs from the version
+        run: |
+          node -e '
+            const pkg = require("./package.json")
+            if (pkg.private !== undefined && pkg.private !== false) {
+              console.error("::error::package.json has \"private\": " + JSON.stringify(pkg.private) + ", so nothing was published.")
+              process.exit(1)
+            }
+            if (process.env.GITHUB_REF_NAME !== "v" + pkg.version) {
+              console.error("::error::The tag " + process.env.GITHUB_REF_NAME + " does not match the package version " + pkg.version + ".")
+              process.exit(1)
+            }
+          '
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24 # the embedded host in the tests needs Node 24 or later
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false # no caches in release builds
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4 # the Bun inside stock OpenCode 2.2.3 and 2.2.4
+          no-cache: true
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      # npm run check built dist/; pack it once for publishing, and test and publish that file.
+      - name: Pack the checked tree
+        id: pack
+        run: |
+          mkdir "$RUNNER_TEMP/package"
+          npm pack --ignore-scripts --json --pack-destination "$RUNNER_TEMP/package" > "$RUNNER_TEMP/pack.json"
+          name=$(node -e '
+            const [packed] = require(process.argv[1])
+            if (!packed.files.some((file) => file.path === "dist/index.js")) {
+              console.error("::error::The tarball has no dist/index.js.")
+              process.exit(1)
+            }
+            console.log(packed.filename)
+          ' "$RUNNER_TEMP/pack.json")
+          tarball="$RUNNER_TEMP/package/$name"
+          sha256sum "$tarball"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+      - name: Run the package test against that exact tarball
+        env:
+          SLACK_PACK_TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: npm run test:pack
+      - name: Require npm 11.5.1 or later for trusted publishing
+        run: |
+          node -e '
+            const [major, minor, patch] = process.argv[1].split(".").map(Number)
+            if (major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) {
+              console.error("::error::npm " + process.argv[1] + " cannot use trusted publishing. It needs npm 11.5.1 or later.")
+              process.exit(1)
+            }
+          ' "$(npm --version)"
+      - name: Publish the tarball with provenance
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          name=$(node -p 'require("./package.json").name')
+          version=$(node -p 'require("./package.json").version')
+          # npm view prints the version when it exists; it fails with E404 when it does not.
+          if [ "$(npm view "$name@$version" version 2>/dev/null)" = "$version" ]; then
+            echo "::notice::$name@$version is already on npm, so it was not published again."
+            exit 0
+          fi
+          tag=latest
+          case "$GITHUB_REF_NAME" in *-*) tag=next ;; esac
+          npm publish "$TARBALL" --provenance --access public --tag "$tag"
