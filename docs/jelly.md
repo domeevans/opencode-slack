@@ -4,6 +4,8 @@
 package's `package.json` as JSON, without loading the plugin, when a person reviews the exact
 version, and uses it as follows.
 
+Jelly names the plugin **Slack** (`jelly.title`), with the package name and version beneath.
+
 ## Tools and permissions
 
 27 tools are declared (14 read-only). Jelly's agents have no base "allow everything"
@@ -33,14 +35,9 @@ None yet.
 
 ## Signing in
 
-Two steps: the key integration `slack-app` takes your organisation's Slack app client ID, then Slack's MCP server `slack` signs in with OAuth (callback `http://localhost:8765/callback`). Jelly shows `integration:slack-app` first; `mcp:slack` appears once a client ID is saved.
+`jelly.signIns` declares two steps. First `app`: the key integration `slack-app`, your organisation's Slack app client ID, pasted once; the row links to [the app manifest](slack-app-manifest.json). Then `slack`, Slack's MCP server, which signs in with OAuth (`after: "app"`: until the app is in, its row reads After Slack app and offers nothing to press). The callback is fixed at `http://localhost:8765/callback`, so two agents signing in to Slack at once collide on that port.
 
-<!-- AUTH-PLACEHOLDER (Jelly rd152): settings and secrets for signing in from Jelly are being
-designed by Jelly's auth lane. Until that lands this package declares no `contributes.settings`;
-add the auth declarations here and in package.json when that design is agreed. -->
-**Not yet declared for Jelly.** How this plugin's sign-in appears in Jelly (desktop and web,
-expiry, reconnect and sign-out) is still being designed; this section and
-`jelly.contributes.settings` will say it once it is.
+Jelly folds the declared sign-ins into this plugin's one card, which shows each as Connected, Not signed in or Sign in again (expired or revoked), and starts, renews and signs out of each. An agent's `jelly_connection_request`, or a tool result that names this plugin's "Run /connect and choose …" next step, opens the same card. The plugin still signs in through OpenCode, as it does without Jelly; the declaration only tells Jelly which of the engine's integrations and servers are this plugin's.
 
 ## Versions
 
