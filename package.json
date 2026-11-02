@@ -55,5 +55,182 @@
     "esbuild": "0.28.2",
     "solid-js": "1.9.17",
     "typescript": "5.9.3"
+  },
+  "jelly": {
+    "tools": [
+      {
+        "name": "slack.slack_search_public",
+        "permission": "slack_slack_search_public",
+        "effect": "allow",
+        "readOnly": true
+      },
+      {
+        "name": "slack.slack_search_channels",
+        "permission": "slack_slack_search_channels",
+        "effect": "allow",
+        "readOnly": true
+      },
+      {
+        "name": "slack.slack_search_users",
+        "permission": "slack_slack_search_users",
+        "effect": "allow",
+        "readOnly": true
+      },
+      {
+        "name": "slack.slack_read_channel",
+        "permission": "slack_slack_read_channel",
+        "effect": "allow",
+        "readOnly": true
+      },
+      {
+        "name": "slack.slack_read_thread",
+        "permission": "slack_slack_read_thread",
+        "effect": "allow",
+        "readOnly": true
+      },
+      {
+        "name": "slack.slack_read_user_profile",
+        "permission": "slack_slack_read_user_profile",
+        "effect": "allow",
+        "readOnly": true
+      },
+      {
+        "name": "slack.slack_read_canvas",
+        "permission": "slack_slack_read_canvas",
+        "effect": "allow",
+        "readOnly": true
+      },
+      {
+        "name": "slack.slack_list_channel_members",
+        "permission": "slack_slack_list_channel_members",
+        "effect": "allow",
+        "readOnly": true
+      },
+      {
+        "name": "slack.slack_get_reactions",
+        "permission": "slack_slack_get_reactions",
+        "effect": "allow",
+        "readOnly": true
+      },
+      {
+        "name": "slack.slack_list_user_channels",
+        "permission": "slack_slack_list_user_channels",
+        "effect": "allow",
+        "readOnly": true
+      },
+      {
+        "name": "slack.slack_read_list",
+        "permission": "slack_slack_read_list",
+        "effect": "allow",
+        "readOnly": true
+      },
+      {
+        "name": "slack.slack_search_emojis",
+        "permission": "slack_slack_search_emojis",
+        "effect": "allow",
+        "readOnly": true
+      },
+      {
+        "name": "slack.slack_search_public_and_private",
+        "permission": "slack_slack_search_public_and_private",
+        "effect": "ask",
+        "readOnly": true
+      },
+      {
+        "name": "slack.slack_read_file",
+        "permission": "slack_slack_read_file",
+        "effect": "ask",
+        "readOnly": true
+      },
+      {
+        "name": "slack.slack_send_message",
+        "permission": "slack_slack_send_message",
+        "effect": "ask",
+        "readOnly": false
+      },
+      {
+        "name": "slack.slack_send_message_draft",
+        "permission": "slack_slack_send_message_draft",
+        "effect": "ask",
+        "readOnly": false
+      },
+      {
+        "name": "slack.slack_schedule_message",
+        "permission": "slack_slack_schedule_message",
+        "effect": "ask",
+        "readOnly": false
+      },
+      {
+        "name": "slack.slack_create_canvas",
+        "permission": "slack_slack_create_canvas",
+        "effect": "ask",
+        "readOnly": false
+      },
+      {
+        "name": "slack.slack_update_canvas",
+        "permission": "slack_slack_update_canvas",
+        "effect": "ask",
+        "readOnly": false
+      },
+      {
+        "name": "slack.slack_add_reaction",
+        "permission": "slack_slack_add_reaction",
+        "effect": "ask",
+        "readOnly": false
+      },
+      {
+        "name": "slack.slack_get_file_upload_url",
+        "permission": "slack_slack_get_file_upload_url",
+        "effect": "ask",
+        "readOnly": false
+      },
+      {
+        "name": "slack.slack_complete_file_upload",
+        "permission": "slack_slack_complete_file_upload",
+        "effect": "ask",
+        "readOnly": false
+      },
+      {
+        "name": "slack.slack_create_conversation",
+        "permission": "slack_slack_create_conversation",
+        "effect": "ask",
+        "readOnly": false
+      },
+      {
+        "name": "slack.slack_create_list",
+        "permission": "slack_slack_create_list",
+        "effect": "ask",
+        "readOnly": false
+      },
+      {
+        "name": "slack.slack_update_list",
+        "permission": "slack_slack_update_list",
+        "effect": "ask",
+        "readOnly": false
+      },
+      {
+        "name": "slack.slack_add_list_record",
+        "permission": "slack_slack_add_list_record",
+        "effect": "ask",
+        "readOnly": false
+      },
+      {
+        "name": "slack.slack_update_list_record",
+        "permission": "slack_slack_update_list_record",
+        "effect": "ask",
+        "readOnly": false
+      }
+    ],
+    "skills": [
+      "slack-search"
+    ],
+    "rpc": [],
+    "views": [],
+    "contributes": {
+      "homeFeeds": [],
+      "homeWidgets": [],
+      "workKinds": [],
+      "settings": []
+    }
   }
 }
