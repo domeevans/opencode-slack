@@ -9,7 +9,9 @@ type ServerConfig = Parameters<McpEditor["set"]>[1]
 /**
  * Slack's hosted MCP server with the Slack app's OAuth client. `redirect_uri` is always explicit: without it
  * OpenCode uses `http://127.0.0.1:<port>/callback`, which does not match an app registered with `localhost`.
- * Protocol, timeouts, headers and Code Mode keep the host defaults.
+ * An `https:` redirect also sets `callback_port`, the port OpenCode's listener takes on 127.0.0.1; a loopback
+ * redirect leaves it out, so OpenCode listens on the redirect's own port. Protocol, timeouts, headers and Code
+ * Mode keep the host defaults.
  */
 export function serverConfig(options: Options, client: Client): ServerConfig {
   return {
@@ -18,6 +20,7 @@ export function serverConfig(options: Options, client: Client): ServerConfig {
     oauth: {
       client_id: client.id,
       redirect_uri: options.redirectUri,
+      ...(options.callbackPort === undefined ? {} : { callback_port: options.callbackPort }),
       scope: options.scopes.join(" "),
       ...(client.secret === undefined ? {} : { client_secret: client.secret }),
     },

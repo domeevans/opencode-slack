@@ -69,6 +69,32 @@ describe("setup with a client ID in the options", () => {
     expect(host.servers.get("slack")).toMatchObject({ oauth: { client_id: "C1" } })
   })
 
+  test("asks nobody to paste a client ID: no Slack app in /connect, status or its next step, in any connection state", async () => {
+    for (const status of [{ status: "pending" }, { status: "needs_auth", error: "Authentication required" }, { status: "failed", error: "boom" }, { status: "disabled" }, { status: "connected" }] as const) {
+      const host = await setUp({ options: { oauth: { client_id: "C1" } }, status: { slack: status } })
+      expect([...host.integrations.keys()].filter((id) => id.endsWith("-app"))).toEqual([])
+      const text = (await host.slashStatus()).text
+      expect({ status: status.status, mentions: text.includes("Slack app") }).toEqual({ status: status.status, mentions: false })
+      expect(await host.status()).toMatchObject({ client: { source: "options" } })
+      await host.dispose()
+    }
+  })
+
+  test("an https redirect registers the server with it and the callback port", async () => {
+    const host = await setUp({ options: { oauth: { client_id: "C1", redirect_uri: "https://host.example/oauth/return", callback_port: 49200 } } })
+    expect(host.servers.get("slack")).toStrictEqual({
+      type: "remote",
+      url: "https://mcp.slack.com/mcp",
+      oauth: {
+        client_id: "C1",
+        redirect_uri: "https://host.example/oauth/return",
+        callback_port: 49200,
+        scope: "channels:history channels:read search:read.public users:read",
+      },
+    })
+    expect(await host.status()).toMatchObject({ callback: "https://host.example/oauth/return", callbackPort: 49200 })
+  })
+
   test("names the Slack server's integration Slack in /connect", async () => {
     const host = await setUp()
     await until(() => host.integrations.get("mcp_slack")?.name === "Slack")

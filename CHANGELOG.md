@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - A `jelly` section in `package.json`: each tool with its permission, its default effect and whether it only reads, the skill ids. Jelly reads it without loading the plugin and applies the declared asks, because its agents have no base allow rule for this plugin's own default rules to follow. `docs/jelly.md` explains it.
 - `title` and `signIns` in the `jelly` section: the name Jelly shows on the plugin's card, and what the plugin signs in to, so that one card can say whether each sign-in is connected and start, renew or end it. `docs/jelly.md` lists them.
+- Hosted callbacks, so sign-in works when OpenCode runs on another machine ([#1](https://github.com/joe-broadhead/opencode-slack/issues/1)): `oauth.redirect_uri` also accepts an `https:` URL with a path and no credentials, query or fragment, together with the new `oauth.callback_port`, the port of OpenCode's local callback listener, which a reverse proxy forwards the address to. The server config then carries `callback_port`, and status shows the port in `callbackPort` and its `Callback` row. `oauth.callback_port` is refused with a loopback redirect, whose own port is the listener's. The docs explain how to add a hosted address to the Slack app's Redirect URLs, and how two sign-ins on one machine avoid colliding on port 8765.
+- `presetBy` on the `jelly.signIns` Slack app step: with `oauth.client_id` set in the plugin options, the step is done, so Jelly asks nobody to paste a client ID.
+
+### Changed
+
+- The `oauth.redirect_uri` errors say which rule an `http:` URL broke, and their next step names both a loopback and a hosted example. The `Callback` status row says to register the URL in the app's Redirect URLs.
 
 ## [0.0.0] - 2026-11-01
 

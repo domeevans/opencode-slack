@@ -24,7 +24,7 @@ export const HOST_VERSIONS = ["2.2.3", "2.2.4"] as const
 
 type Client = Pick<OpenCodeClient, "agent" | "command" | "integration" | "mcp" | "plugin" | "rpc" | "session" | "skill">
 
-const PROJECTS = ["defaults", "rules", "collision", "invalid", "connect"] as const
+const PROJECTS = ["defaults", "rules", "collision", "invalid", "connect", "hosted"] as const
 export type Project = (typeof PROJECTS)[number]
 
 export interface Host {
@@ -41,6 +41,9 @@ export interface Host {
 const rule = (effect: Rule["effect"]) => (action: string): Rule => ({ action, resource: "*", effect })
 const allow = rule("allow")
 const deny = rule("deny")
+
+/** The https redirect and listener port the "hosted" project sets. */
+export const HOSTED_OAUTH = { redirect_uri: "https://host.example/oauth/return", callback_port: 49231 } as const
 
 /** A server the user configured under the plugin's default name. */
 export const USER_SERVER = { type: "remote", url: "https://mcp.example.invalid/mcp", oauth: false } as const
@@ -94,6 +97,9 @@ function projectConfig(project: Project, plugin: string): object {
     case "connect":
       // No client ID in the options: it comes from the /connect Slack app entry.
       return { ...LOCAL_PROVIDERS_OFF, plugins: [slack(plugin, {}), probe({})] }
+    case "hosted":
+      // A hosted return address, which a proxy forwards to OpenCode's listener on the callback port.
+      return { ...LOCAL_PROVIDERS_OFF, plugins: [slack(plugin, { oauth: { client_id: CLIENT_ID, ...HOSTED_OAUTH } }), probe({})] }
   }
 }
 

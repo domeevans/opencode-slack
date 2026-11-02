@@ -17,6 +17,7 @@ const status = object({
   server: object({ name: text, url: text }, ["name", "url"]),
   client: object({ id: text, mode: { enum: ["public_pkce", "confidential"] }, source: { enum: ["options", "connect"] } }, ["id", "mode", "source"]),
   callback: text,
+  callbackPort: { type: "integer" },
   scopes: texts,
   asksBefore: texts,
   tools: object({

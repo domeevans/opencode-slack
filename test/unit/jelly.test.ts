@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
+import { appDisplayName, appIntegrationID, resolveClient, serverDisplayName } from "../../src/connect.js"
+import { DEFAULT_SERVER } from "../../src/defaults.js"
+import plugin from "../../src/index.js"
+import { parseOptions } from "../../src/options.js"
 import { defaultRules } from "../../src/permissions.js"
+import { fakeHost } from "./fakes.js"
 
 /**
  * The `jelly` section of package.json, which Jelly reads without loading the plugin. Jelly's agents have no base
@@ -10,7 +15,8 @@ import { defaultRules } from "../../src/permissions.js"
  */
 
 type Tool = { name: string; permission: string; effect: string; readOnly: boolean }
-const jelly = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")).jelly as { tools: Tool[]; skills: string[] }
+type SignIn = { id: string; label: string; integration?: string; server?: string; after?: string; presetBy?: string; help?: { url: string; label: string } }
+const jelly = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")).jelly as { tools: Tool[]; skills: string[]; signIns: SignIn[] }
 const rules: readonly { action: string; resource: string; effect: string }[] = [{ action: "*", resource: "*", effect: "allow" }, ...defaultRules("slack")]
 const wildcard = (pattern: string) => new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replaceAll("*", ".*")}$`)
 const effectOf = (action: string) => [...rules].reverse().find((rule) => wildcard(rule.action).test(action) && rule.resource === "*")?.effect
@@ -29,5 +35,48 @@ describe("the jelly declaration", () => {
 
   test("names every skill the package ships", () => {
     expect([...jelly.skills].sort()).toEqual(readdirSync(new URL("../../skills", import.meta.url)).sort())
+  })
+
+  describe("sign-ins", () => {
+    const [app, slack] = jelly.signIns
+    /** Plugin options with only the declared option path set, as an organisation's managed config sets it. */
+    const presetOptions = (path: string, value: string) =>
+      path.split(".").reduceRight<unknown>((inner, key) => ({ [key]: inner }), value) as Record<string, unknown>
+
+    test("declare the Slack app's /connect entry, then the server that waits for it, under the names /connect shows", () => {
+      expect(jelly.signIns.length).toBe(2)
+      expect(app).toMatchObject({ id: "app", label: appDisplayName(DEFAULT_SERVER), integration: appIntegrationID(DEFAULT_SERVER) })
+      expect(slack).toEqual({ id: "slack", label: serverDisplayName(DEFAULT_SERVER), server: DEFAULT_SERVER, after: "app" })
+    })
+
+    test("the app step is preset by the option that pins the client, so that client is used and no entry is registered", async () => {
+      expect(app?.presetBy).toBe("oauth.client_id")
+      const options = presetOptions(app!.presetBy!, "C1")
+      const parsed = parseOptions(options)
+      if (!parsed.ok) throw new Error(parsed.error.message)
+      const resolved = await resolveClient({ connection: { active: async () => undefined, resolve: async () => undefined, status: async () => {} } } as never, parsed.options)
+      expect(resolved.client).toEqual({ id: "C1", source: "options" })
+
+      const host = fakeHost({ options })
+      const cleanup = await plugin.setup(host.ctx)
+      try {
+        expect(host.integrations.has(app!.integration!)).toBe(false)
+        expect(host.servers.get(slack!.server!)).toMatchObject({ oauth: { client_id: "C1" } })
+        expect((await host.slashStatus()).text).not.toContain(app!.label)
+      } finally {
+        await cleanup?.()
+      }
+    })
+
+    test("without the preset option, the app step's entry is the one /connect lists", async () => {
+      const host = fakeHost({ options: {} })
+      const cleanup = await plugin.setup(host.ctx)
+      try {
+        expect(host.integrations.get(app!.integration!)?.name).toBe(app!.label)
+        expect(host.servers.has(slack!.server!)).toBe(false)
+      } finally {
+        await cleanup?.()
+      }
+    })
   })
 })

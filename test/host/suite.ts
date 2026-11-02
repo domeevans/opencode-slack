@@ -7,7 +7,7 @@ import { defaultRules, type Rule } from "../../src/permissions.js"
 import type { Status } from "../../src/status.js"
 import { classify } from "../../src/tools.js"
 import { FAKE_TOOLS } from "./fake-slack-mcp.js"
-import { CLIENT_ID, repositoryChanges, USER_SERVER, type Host, type Project } from "./harness.js"
+import { CLIENT_ID, HOSTED_OAUTH, repositoryChanges, USER_SERVER, type Host, type Project } from "./harness.js"
 import type { Outcome } from "./probe/index.js"
 
 interface ProbeState {
@@ -195,6 +195,19 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         expect(agents.map((agent) => catchAlls(agent.permissions)).every((n) => n === 0)).toBe(true)
         expect((await host.client.skill.list(at("invalid"))).data.map((skill) => skill.id)).not.toContain("slack-search")
         expect(await slashStatus("invalid")).toStartWith("Slack\nConnection: not configured. OPTIONS_INVALID: ")
+      })
+    })
+
+    describe("an https redirect", () => {
+      test("registers the server with the redirect and the callback port, which the host accepts", async () => {
+        expect((await probe("hosted")).registered).toStrictEqual({
+          type: "remote",
+          url: "https://mcp.slack.com/mcp",
+          oauth: { client_id: CLIENT_ID, ...HOSTED_OAUTH, scope: "channels:history channels:read search:read.public users:read" },
+        })
+        expect(await status("hosted")).toMatchObject({ state: "disabled", callback: HOSTED_OAUTH.redirect_uri, callbackPort: HOSTED_OAUTH.callback_port })
+        expect((await host.client.integration.list(at("hosted"))).data.map((item) => item.id)).not.toContain("slack-app")
+        expect(await slashStatus("hosted")).not.toContain("Slack app")
       })
     })
 

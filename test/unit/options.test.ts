@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { DEFAULT_REDIRECT_URI, DEFAULT_SCOPES } from "../../src/defaults.js"
+import { CALLBACK_PORT_EXAMPLE, DEFAULT_REDIRECT_URI, DEFAULT_SCOPES, HOSTED_REDIRECT_EXAMPLE } from "../../src/defaults.js"
 import { parseOptions, type OptionsError } from "../../src/options.js"
 
 const CLIENT = "1234567890.0987654321"
@@ -52,6 +52,36 @@ describe("parseOptions defaults", () => {
     })
   })
 
+  test("an https redirect with a callback port is kept with both", () => {
+    expect(parseOptions(withOAuth({ redirect_uri: "https://host.example/oauth/return", callback_port: 49200 }))).toEqual({
+      ok: true,
+      options: {
+        clientId: CLIENT,
+        redirectUri: "https://host.example/oauth/return",
+        callbackPort: 49200,
+        scopes: [...DEFAULT_SCOPES],
+        server: "slack",
+        allowUntestedHost: false,
+      },
+    })
+  })
+
+  test.each([
+    "https://host.example:8443/slack/callback",
+    "https://opencode.internal.example/oauth/return/slack",
+    "https://localhost/callback",
+    "HTTPS://Host.Example/oauth/return",
+  ])("accepts the https redirect %s with a callback port", (redirect_uri) => {
+    expect(parseOptions(withOAuth({ redirect_uri, callback_port: 1 }))).toMatchObject({ ok: true, options: { redirectUri: redirect_uri, callbackPort: 1 } })
+  })
+
+  test.each(["http://localhost:8765/callback", "http://127.0.0.1:1/cb", "http://localhost:65535/a/b"])("a loopback redirect %s has no callback port", (redirect_uri) => {
+    const parsed = parseOptions(withOAuth({ redirect_uri }))
+    if (!parsed.ok) throw new Error(parsed.error.message)
+    expect(parsed.options.redirectUri).toBe(redirect_uri)
+    expect(Object.hasOwn(parsed.options, "callbackPort")).toBe(false)
+  })
+
   test("returns a copy of the scopes, never the caller's or the default array", () => {
     const scopes = ["channels:read"]
     const parsed = parseOptions(withOAuth({ scopes }))
@@ -93,7 +123,7 @@ describe("parseOptions rejects", () => {
       code: "OPTIONS_INVALID",
       field: "oauth.clientId",
       message: "This option is not supported.",
-      next: "Remove it. Supported oauth options: client_id, redirect_uri, scopes, client_secret.",
+      next: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
     })
   })
 
@@ -108,24 +138,63 @@ describe("parseOptions rejects", () => {
 
   test.each([
     ["not a URL", "/callback", "Must be a valid URL."],
-    ["another scheme", "localhost:8765/callback", "Must use http:."],
-    ["https", "https://localhost:8765/callback", "Must use http:."],
-    ["a remote host", "http://example.com:8765/callback", "Must use the host localhost or 127.0.0.1."],
-    ["IPv6 loopback", "http://[::1]:8765/callback", "Must use the host localhost or 127.0.0.1."],
-    ["no port", "http://localhost/callback", "Must include an explicit port."],
-    ["credentials", "http://user:pass@localhost:8765/callback", "Must not include credentials."],
-    ["a query", "http://localhost:8765/callback?x=1", "Must not include a query or fragment."],
+    ["another scheme", "localhost:8765/callback", "Must use http: or https:."],
+    ["ftp", "ftp://host.example/callback", "Must use http: or https:."],
+    ["an http remote host", "http://example.com:8765/callback", "An http: URL must use the host localhost or 127.0.0.1."],
+    ["http IPv6 loopback", "http://[::1]:8765/callback", "An http: URL must use the host localhost or 127.0.0.1."],
+    ["http without a port", "http://localhost/callback", "An http: URL must include an explicit port."],
+    ["http credentials", "http://user:pass@localhost:8765/callback", "Must not include credentials."],
+    ["https credentials", "https://user:pass@host.example/oauth/return", "Must not include credentials."],
+    ["an https user name", "https://user@host.example/oauth/return", "Must not include credentials."],
+    ["an http query", "http://localhost:8765/callback?x=1", "Must not include a query or fragment."],
+    ["an https query", "https://host.example/oauth/return?x=1", "Must not include a query or fragment."],
     ["an empty query", "http://localhost:8765/callback?", "Must not include a query or fragment."],
-    ["a fragment", "http://localhost:8765/callback#top", "Must not include a query or fragment."],
-    ["no path", "http://localhost:8765", "Must include a path, such as /callback."],
-    ["a root path", "http://localhost:8765/", "Must include a path, such as /callback."],
+    ["an http fragment", "http://localhost:8765/callback#top", "Must not include a query or fragment."],
+    ["an https fragment", "https://host.example/oauth/return#top", "Must not include a query or fragment."],
+    ["no http path", "http://localhost:8765", "Must include a path, such as /callback."],
+    ["a root http path", "http://localhost:8765/", "Must include a path, such as /callback."],
+    ["no https path", "https://host.example", "Must include a path, such as /callback."],
+    ["a root https path", "https://host.example/", "Must include a path, such as /callback."],
     ["not a string", 8765, "Must be a string."],
   ])("a redirect_uri with %s", (_label, redirect_uri, message) => {
-    expect(rejected(withOAuth({ redirect_uri }))).toEqual({
+    expect(rejected(withOAuth({ redirect_uri, callback_port: 8766 }))).toEqual({
       code: "OPTIONS_INVALID",
       field: "oauth.redirect_uri",
       message,
-      next: `Use the loopback URL registered in your Slack app, for example ${DEFAULT_REDIRECT_URI}.`,
+      next: `Use a URL listed in the app's Redirect URLs, for example ${DEFAULT_REDIRECT_URI} or ${HOSTED_REDIRECT_EXAMPLE}.`,
+    })
+  })
+
+  test.each([["zero", 0], ["too high", 65536], ["negative", -1], ["fractional", 8765.5], ["a string", "8765"], ["null", null], ["a list", [8765]]])(
+    "a callback_port that is %s",
+    (_label, callback_port) => {
+      expect(rejected(withOAuth({ redirect_uri: "https://host.example/oauth/return", callback_port }))).toEqual({
+        code: "OPTIONS_INVALID",
+        field: "oauth.callback_port",
+        message: "Must be a whole number from 1 to 65535.",
+        next: `Set it to the local port that receives the forwarded callback, for example ${CALLBACK_PORT_EXAMPLE}.`,
+      })
+    },
+  )
+
+  test.each([["the default redirect", {}], ["a loopback redirect", { redirect_uri: "http://127.0.0.1:9000/cb" }], ["the same port", { redirect_uri: "http://localhost:8765/callback" }]])(
+    "a callback_port with %s",
+    (_label, oauth) => {
+      expect(rejected(withOAuth({ ...oauth, callback_port: 8765 }))).toEqual({
+        code: "OPTIONS_INVALID",
+        field: "oauth.callback_port",
+        message: "Applies only to an https: oauth.redirect_uri.",
+        next: "Remove it: with a loopback oauth.redirect_uri, OpenCode listens on that URL's port.",
+      })
+    },
+  )
+
+  test("an https redirect without a callback_port", () => {
+    expect(rejected(withOAuth({ redirect_uri: "https://host.example/oauth/return" }))).toEqual({
+      code: "OPTIONS_INVALID",
+      field: "oauth.callback_port",
+      message: "Must be set with an https: oauth.redirect_uri.",
+      next: `Set it to the local port your proxy forwards the redirect to, for example ${CALLBACK_PORT_EXAMPLE}.`,
     })
   })
 
@@ -207,6 +276,9 @@ describe("errors never echo values", () => {
     ["a spaced client ID", { oauth: { client_id: `${MARKER} x` } }],
     ["a remote redirect", withOAuth({ redirect_uri: `http://${MARKER}.example:1/cb` })],
     ["a redirect query", withOAuth({ redirect_uri: `http://localhost:1/cb?${MARKER}` })],
+    ["an https redirect query", withOAuth({ redirect_uri: `https://host.example/cb?${MARKER}`, callback_port: 1 })],
+    ["https redirect credentials", withOAuth({ redirect_uri: `https://${MARKER}:${MARKER}@host.example/cb`, callback_port: 1 })],
+    ["a bad callback port", withOAuth({ redirect_uri: "https://host.example/cb", callback_port: MARKER })],
     ["a duplicated scope", withOAuth({ scopes: [MARKER, MARKER] })],
     ["a spaced scope", withOAuth({ scopes: [`${MARKER} x`] })],
     ["a non-string secret", withOAuth({ client_secret: [MARKER] })],
