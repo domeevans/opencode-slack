@@ -57,6 +57,7 @@
     "typescript": "5.9.3"
   },
   "jelly": {
+    "title": "Slack",
     "tools": [
       {
         "name": "slack.slack_search_public",
@@ -226,6 +227,23 @@
     ],
     "rpc": [],
     "views": [],
+    "signIns": [
+      {
+        "id": "app",
+        "label": "Slack app",
+        "integration": "slack-app",
+        "help": {
+          "url": "https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/slack-app-manifest.json",
+          "label": "Create the Slack app from its manifest, then paste its client ID"
+        }
+      },
+      {
+        "id": "slack",
+        "label": "Slack",
+        "server": "slack",
+        "after": "app"
+      }
+    ],
     "contributes": {
       "homeFeeds": [],
       "homeWidgets": [],
