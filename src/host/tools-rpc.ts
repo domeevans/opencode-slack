@@ -207,8 +207,11 @@ function strict(schema: JsonSchema, issues: (value: Record<string, unknown>) => 
 }
 
 class ScriptError extends Error {
-  constructor(readonly failure: Failure) {
-    super(`${failure.code}: ${failure.what}. Next step: ${failure.next}`)
+  readonly failure: Failure
+  constructor(failure: Failure) {
+    // `what` may end with its own full stop (a refused ask's reason, an upstream first line); keep exactly one.
+    super(`${failure.code}: ${failure.what.replace(/[.\s]+$/, "")}. Next step: ${failure.next}`)
+    this.failure = failure
   }
 }
 

@@ -151,7 +151,8 @@ const refusedWith = (value: unknown, code: string) => expect(structuredClone(val
 const failure = (code: string) => ({
   type: "failed",
   handlerError: true,
-  message: expect.stringMatching(new RegExp(`^${code}: .+\\. Next step: .+\\.$`)),
+  // Exactly one full stop before "Next step", even when the reason or upstream line ends with its own.
+  message: expect.stringMatching(new RegExp(`^${code}: [^]*[^.\\s]\\. Next step: [^]+\\.$`)),
   data: { code, next: expect.stringMatching(/\.$/) },
 })
 
