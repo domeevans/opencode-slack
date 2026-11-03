@@ -1,5 +1,9 @@
 // An offline stand-in for Slack's MCP server over stdio: every tool in the classification table plus one the
-// plugin does not know. It answers the handshake and tool listing; it is never called.
+// plugin does not know. It answers the handshake and tool listing, and a `tools/call` with the tool's name and
+// arguments as structured content and text, or, for a `query` that starts with "fail", with an upstream error
+// (`isError`) whose first line holds a signed URL. With a file path as its argument, it appends each called tool's
+// name to that file, one per line, so a test can tell which tools OpenCode called.
+import { appendFileSync } from "node:fs"
 import { createInterface } from "node:readline"
 
 export const FAKE_TOOLS = [
@@ -13,12 +17,23 @@ export const FAKE_TOOLS = [
   "slack_brand_new_tool",
 ]
 
+/** Each fake tool's input schema. */
+export const FAKE_INPUT = { type: "object", properties: { query: { type: "string" } } } as const
+
+/** The upstream error a "fail" query gets: two lines, the first with a signed URL. */
+export const UPSTREAM_FAILURE = "invalid_arguments for https://files.slack.example/f.pdf?X-Amz-Signature=fake-signature-123\nTraceback: second line"
+
 if (import.meta.main) {
-  const tools = FAKE_TOOLS.map((name) => ({ name, description: `Fake ${name}`, inputSchema: { type: "object", properties: {} } }))
+  const log = process.argv[2]
+  const tools = FAKE_TOOLS.map((name) => ({ name, description: `Fake ${name}`, inputSchema: FAKE_INPUT }))
   const send = (message: object) => process.stdout.write(`${JSON.stringify(message)}\n`)
   createInterface({ input: process.stdin }).on("line", (line) => {
     if (line.trim() === "") return
-    const message = JSON.parse(line) as { id?: number | string; method: string; params?: { protocolVersion?: string } }
+    const message = JSON.parse(line) as {
+      id?: number | string
+      method: string
+      params?: { protocolVersion?: string; name?: string; arguments?: Record<string, unknown> }
+    }
     if (message.id === undefined) return
     const reply = (result: object) => send({ jsonrpc: "2.0", id: message.id, result })
     switch (message.method) {
@@ -27,6 +42,13 @@ if (import.meta.main) {
         return reply({ protocolVersion: message.params?.protocolVersion ?? "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "fake-slack", version: "0.0.0" } })
       case "tools/list":
         return reply({ tools })
+      case "tools/call": {
+        const name = String(message.params?.name)
+        const args = message.params?.arguments ?? {}
+        if (log !== undefined) appendFileSync(log, `${name}\n`)
+        if (String(args.query ?? "").startsWith("fail")) return reply({ content: [{ type: "text", text: UPSTREAM_FAILURE }], isError: true })
+        return reply({ content: [{ type: "text", text: `${name}: ${JSON.stringify(args)}` }], structuredContent: { tool: name, arguments: args } })
+      }
       case "ping":
         return reply({})
       default:

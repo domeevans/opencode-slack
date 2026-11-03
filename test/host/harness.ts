@@ -22,7 +22,7 @@ export const CLIENT_ID = "TEST_CLIENT_ID"
 /** The stock OpenCode releases the plugin is tested on. */
 export const HOST_VERSIONS = ["2.2.3", "2.2.4"] as const
 
-type Client = Pick<OpenCodeClient, "agent" | "command" | "integration" | "mcp" | "plugin" | "rpc" | "session" | "skill">
+type Client = Pick<OpenCodeClient, "agent" | "command" | "integration" | "mcp" | "permission" | "plugin" | "rpc" | "session" | "skill">
 
 const PROJECTS = ["defaults", "rules", "collision", "invalid", "connect", "hosted"] as const
 export type Project = (typeof PROJECTS)[number]
@@ -35,6 +35,8 @@ export interface Host {
   /** Where this host keeps its state, relative to the root; the test checks it was written. */
   readonly state: string
   location(project: Project): { readonly directory: string }
+  /** The tools OpenCode called on the fake Slack server, in order. */
+  toolCalls(): string[]
   close(): Promise<void>
 }
 
@@ -65,13 +67,13 @@ const LOCAL_PROVIDERS_OFF = {
  * Each project's opencode.jsonc, loading the Slack plugin from `plugin`. The probe comes after slack.workspace:
  * transforms run in config order.
  */
-function projectConfig(project: Project, plugin: string): object {
+function projectConfig(project: Project, plugin: string, callLog: string): object {
   const configured = slack(plugin, { oauth: { client_id: CLIENT_ID } })
   switch (project) {
     case "defaults":
       return {
         ...LOCAL_PROVIDERS_OFF,
-        plugins: [configured, probe({ fake: [process.execPath, FAKE_SERVER] })],
+        plugins: [configured, probe({ fake: [process.execPath, FAKE_SERVER, callLog] })],
         agents: {
           custom: configOnly("Defined only in user config"),
           locked: configOnly("Denies everything", [deny("*")]),
@@ -105,6 +107,8 @@ function projectConfig(project: Project, plugin: string): object {
 
 interface Root {
   readonly path: string
+  /** Where the fake Slack server logs the tools it is called with. */
+  readonly callLog: string
   readonly env: Readonly<Record<string, string>>
   directory(project: Project): string
   remove(): void
@@ -136,11 +140,12 @@ function makeRoot(label: string, plugin: string): Root {
   mkdirSync(userConfig, { recursive: true })
   writeFileSync(join(userConfig, "opencode.json"), JSON.stringify(LOCAL_PROVIDERS_OFF))
   const directory = (project: Project) => join(path, "projects", project)
+  const callLog = join(path, "fake-slack-calls.log")
   for (const project of PROJECTS) {
     mkdirSync(directory(project), { recursive: true })
-    writeFileSync(join(directory(project), "opencode.jsonc"), JSON.stringify(projectConfig(project, plugin), null, 2))
+    writeFileSync(join(directory(project), "opencode.jsonc"), JSON.stringify(projectConfig(project, plugin, callLog), null, 2))
   }
-  return { path, env, directory, remove: () => rmSync(path, { recursive: true, force: true }) }
+  return { path, callLog, env, directory, remove: () => rmSync(path, { recursive: true, force: true }) }
 }
 
 // Anything that tries the network fails fast instead of reaching a real service.
@@ -155,6 +160,8 @@ const OFFLINE = {
   OPENCODE_DISABLE_AUTOUPDATE: "1",
   OPENCODE_DISABLE_FREE_MODELS: "1",
 }
+
+const toolCalls = (root: Root) => () => (existsSync(root.callLog) ? readFileSync(root.callLog, "utf8").split("\n").filter(Boolean) : [])
 
 /** The public `@opencode/sdk` host in this process, at the version installed as a devDependency. */
 export async function startEmbedded(): Promise<Host> {
@@ -193,6 +200,7 @@ export async function startEmbedded(): Promise<Host> {
       root: root.path,
       state: "opencode.db",
       location: (project) => ({ directory: root.directory(project) }),
+      toolCalls: toolCalls(root),
       close: async () => {
         await opencode.close()
         restore()
@@ -302,6 +310,7 @@ export async function startBinary(version: string, plugin = REPO): Promise<Host>
     root: root.path,
     state: join("home", ".local", "share", "opencode"),
     location: (project) => ({ directory: root.directory(project) }),
+    toolCalls: toolCalls(root),
     close,
   }
 }

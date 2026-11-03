@@ -42,6 +42,17 @@ The Slack tools are Slack's own. With Code Mode, which is on by default, agents 
 - `OpenCode`: the version and the tested range;
 - `Next step`: exactly one, or `Nothing to do.`
 
+### Scripts
+
+A script or a cron job can call Slack's fourteen read tools with no model, through `opencode api`. It runs as a session and its agent, under that agent's permission rules and the session's own. The private search and the file read ask by default, so a script needs an allow rule for them. Writes and sends are never available to scripts:
+
+```sh
+opencode api post /api/rpc/slack.workspace.tools/slack_search_public \
+  -d '{"input":{"sessionID":"ses_…","input":{"keywords":["launch"]}}}'
+```
+
+See [Scripting](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/scripting.md).
+
 ## Permissions
 
 **What runs without asking:** the known read tools: `slack_search_public`, `slack_search_channels`, `slack_search_users`, `slack_read_channel`, `slack_read_thread`, `slack_read_user_profile`, `slack_read_canvas`, `slack_list_channel_members`, `slack_get_reactions`, `slack_list_user_channels`, `slack_read_list` and `slack_search_emojis`.
@@ -165,6 +176,8 @@ Run `/slack-status` (or `/slack` in the TUI) first. Its `Connection` row shows a
 | `connected` | none | Ready. The next step reads `Nothing to do.` | If status names agents without default rules, put the default rules first in their own permissions (see above). |
 
 If status itself cannot be read, `/slack-status` says `STATUS_UNAVAILABLE`; run it again in a moment.
+
+A script's errors from the tools RPC have their own codes, listed in [Scripting](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/scripting.md#errors).
 
 **Slack shows an error during sign-in**
 

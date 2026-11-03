@@ -26,7 +26,8 @@ const until = async (condition: () => boolean | Promise<boolean>) => {
 
 // The `/connect` rename of the Slack server's integration runs in the background, so these leave it out.
 const registrations = (calls: readonly string[]) => calls.filter((call) => call !== "integration.transform")
-const FULL = ["mcp.transform", "agent.transform", "skill.transform", "rpc.register", "command.transform"]
+// The status RPC, then the tools RPC and its evaluate hook.
+const FULL = ["mcp.transform", "agent.transform", "skill.transform", "rpc.register", "rpc.register", "evaluate hook", "command.transform"]
 const STATUS_ONLY = ["rpc.register", "command.transform"]
 const CONNECT = {}
 const stored = (key: string, metadata?: Record<string, string>) => ({ type: "key" as const, key, ...(metadata ? { metadata } : {}) })
@@ -41,10 +42,11 @@ test("the plugin ID is slack.workspace", () => {
 })
 
 describe("setup with a client ID in the options", () => {
-  test("registers the server, the default rules, the skills, the RPC and /slack-status, in that order", async () => {
+  test("registers the server, the default rules, the skills, the RPCs and /slack-status, in that order", async () => {
     const host = await setUp()
     expect(registrations(host.calls)).toEqual(FULL)
     expect(host.rpc.id).toBe("slack.workspace")
+    expect([...host.rpcs.keys()]).toEqual(["slack.workspace", "slack.workspace.tools"])
     expect(host.commands.map((command) => command.name)).toEqual(["slack-status"])
     expect(host.commands[0]?.description).toBe("Show Slack sign-in, connection and permission status")
     expect(host.skills.map((skill) => skill.id)).toEqual(["slack-search"] as never)

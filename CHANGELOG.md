@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- The tools RPC, `slack.workspace.tools`: a script can call Slack's twelve reads, `slack_search_public_and_private` and `slack_read_file` with no model, through `opencode api`, as a session and its agent. It gets exactly the access that agent's model has: a tool its rules hide is refused, OpenCode checks each call against the agent's and the session's rules, and an ask is refused at once because no one is there to answer it, so the private search and the file read need an allow rule. `describe` lists the methods with each tool's live input schema. Slack's writes and sends, and any tool Slack adds later, are never methods. `docs/scripting.md` explains it.
+
 ## [0.0.1] - 2026-11-03
 
 ### Added

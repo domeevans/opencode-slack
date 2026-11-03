@@ -323,6 +323,8 @@ Approving a write tool in OpenCode does not grant its Slack scope. Without the s
 | `unguardedAgents` | Agents that would run an unknown Slack tool without asking |
 | `host` | `version`, tested `range` and `tested` |
 
+Scripts have a second RPC, `slack.workspace.tools`, which calls Slack's read tools with no model. It has its own error codes; see [Scripting](scripting.md).
+
 The text surfaces show the rows `Connection`, `Account`, `Access`, `Server`, `Client`, `Callback`, `Scopes`, `Tools`, `Agents without default rules`, `OpenCode` and `Next step`, in that order. The RPC has one error, `unavailable`. OpenCode does not record which Slack account signed in, and the plugin never reads tokens, so status has no account field. Slack shows the workspace and account on its sign-in page.
 
 ## Errors

@@ -23,6 +23,10 @@ If the Slack tools are not in the listed catalog, find them with `search({ names
 
 The parameters below are the common ones. The schema that Slack serves for each tool is the source of truth; follow it if it differs.
 
+## Scripts
+
+When the user wants a job that runs without you, such as a cron job or a shell script, it can call the read tools through the OpenCode server, with no model. The RPC `slack.workspace.tools` has one method per read tool, named as the tool (for example `slack_search_public` or `slack_read_thread`), with the tool's own input, and `describe`, which lists them with their input schemas. Each call is `opencode api post /api/rpc/slack.workspace.tools/<method>` with the body `{"input":{"sessionID":"<session>","input":<the tool's input>}}`. The script runs as that session's agent, under its permission rules, so have the script create its session once with `opencode api post /api/session` and a body such as `{"title":"release digest","agent":"build"}`. An ask is refused, so `slack_search_public_and_private` and `slack_read_file` need an allow rule in the agent's or the session's `permissions`. Scripts cannot send or change anything in Slack. The details are in the plugin's `docs/scripting.md`.
+
 ## 1. Find
 
 | Need | Tool | Main parameters |
