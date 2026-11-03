@@ -23,12 +23,14 @@ export type UsedContext = {
   readonly mcp: Pick<Context["mcp"], "transform" | "list" | "reload">
   readonly integration: Pick<Context["integration"], "transform" | "get"> & { readonly connection: Pick<Context["integration"]["connection"], "active" | "resolve" | "status"> }
   readonly event: Pick<Context["event"], "subscribe">
-  readonly agent: Pick<Context["agent"], "transform" | "list">
+  readonly agent: Pick<Context["agent"], "transform" | "list" | "get">
   readonly tool: Pick<Context["tool"], "list">
   readonly rpc: Pick<Context["rpc"], "register">
+  readonly permission: Pick<Context["permission"], "hook">
   readonly command: Pick<Context["command"], "transform">
-  readonly session: Pick<Context["session"], "synthetic">
+  readonly session: Pick<Context["session"], "synthetic" | "get">
   readonly skill: Pick<Context["skill"], "transform">
+  readonly location: Pick<Context["location"], "directory">
 }
 
 export const BASE_ALLOW: Rule = { action: "*", resource: "*", effect: "allow" }
@@ -83,7 +85,21 @@ export function mcpEditor(initial: Readonly<Record<string, ServerConfig>> = {}) 
 interface FakeTool {
   readonly name: string
   readonly options?: { readonly namespace?: string }
+  /** The host's tool id, `<server>_<name>` for an MCP tool; the tools RPC finds executors by it. */
+  readonly id?: string
+  readonly input?: object
+  /** The host's executor, which the tools RPC calls. */
+  readonly execute?: (input: unknown, call: { sessionID: string; agent: string; id: string }) => Promise<unknown>
 }
+
+/** A session as the tools RPC reads it. */
+export interface FakeSession {
+  readonly agent?: string
+  readonly permissions?: readonly Rule[]
+}
+
+/** The directory of the fake host's location. */
+export const FAKE_LOCATION = "/tmp/slack-fake-location"
 
 export interface FakeHostInput {
   readonly version?: string
@@ -94,6 +110,8 @@ export interface FakeHostInput {
   readonly tools?: readonly FakeTool[]
   /** Stored credentials by integration ID, as `/connect` saves them. */
   readonly credentials?: Readonly<Record<string, CredentialValue>>
+  /** Sessions by ID, for the tools RPC. */
+  readonly sessions?: Readonly<Record<string, FakeSession>>
 }
 
 /** An event stream that delivers what `push` sends and ends when its signal aborts. */
@@ -145,7 +163,10 @@ export function fakeHost(input: FakeHostInput = {}) {
   const commands: CommandDefinition[] = []
   const skills: SkillInfo[] = []
   const synthetic: SyntheticInput[] = []
+  // Every registered RPC by ID; `rpc` is the first, the status RPC.
+  const rpcs = new Map<string, Record<string, Handler>>()
   const rpc: { id?: string; handlers: Record<string, Handler> } = { handlers: {} }
+  const hooks = new Set<unknown>()
   let failLists = false
 
   const registration = { dispose: async () => {} }
@@ -205,15 +226,30 @@ export function fakeHost(input: FakeHostInput = {}) {
         return registration
       },
       list: async () => ({ data: agents }) as never,
+      get: (async ({ agentID }: { agentID: string }) => {
+        const found = agents.find((item) => item.id === agentID)
+        if (found === undefined) throw Object.assign(new Error(`Agent not found: ${agentID}`), { _tag: "Agent.NotFoundError" })
+        return { location: { directory: FAKE_LOCATION }, data: { id: found.id, permissions: found.permissions } }
+      }) as never,
     },
     tool: { list: async () => (input.tools ?? []) as never },
     rpc: {
       register: (async (definition: { id: string }, handlers: Record<string, Handler>) => {
         calls.push("rpc.register")
-        rpc.id = definition.id
-        rpc.handlers = handlers
-        return { ...registration, events: { emit: async () => {} } }
+        if (rpc.id === undefined) {
+          rpc.id = definition.id
+          rpc.handlers = handlers
+        }
+        rpcs.set(definition.id, handlers)
+        return { dispose: async () => void rpcs.delete(definition.id), events: { emit: async () => {} } }
       }) as unknown as UsedContext["rpc"]["register"],
+    },
+    permission: {
+      hook: (async (_name: string, callback: unknown) => {
+        calls.push("evaluate hook")
+        hooks.add(callback)
+        return { dispose: async () => void hooks.delete(callback) }
+      }) as never,
     },
     command: {
       transform: async (callback) => {
@@ -227,6 +263,11 @@ export function fakeHost(input: FakeHostInput = {}) {
         synthetic.push(message)
         return {} as never
       },
+      get: (async ({ sessionID }: { sessionID: string }) => {
+        const session = input.sessions?.[sessionID]
+        if (session === undefined) throw Object.assign(new Error(`Session not found: ${sessionID}`), { _tag: "Session.NotFoundError" })
+        return { id: sessionID, location: { directory: FAKE_LOCATION }, ...session }
+      }) as never,
     },
     skill: {
       transform: async (callback) => {
@@ -235,6 +276,7 @@ export function fakeHost(input: FakeHostInput = {}) {
         return registration
       },
     },
+    location: { directory: FAKE_LOCATION as Context["location"]["directory"] },
   }
 
   /** Calls the registered RPC `status` method the way the host does. */
@@ -242,6 +284,13 @@ export function fakeHost(input: FakeHostInput = {}) {
     const handler = rpc.handlers.status
     if (handler === undefined) throw new Error("status RPC is not registered")
     return handler({}, { signal, error: (type, message, data) => ({ error: type, message, data }) })
+  }
+
+  /** Calls a tools RPC method the way the host does, with the envelope `{ sessionID, input }`. */
+  const script = (method: string, sessionID: string, toolInput: unknown = {}, signal = new AbortController().signal) => {
+    const handler = rpcs.get("slack.workspace.tools")?.[method]
+    if (handler === undefined) throw new Error(`the tools RPC has no method ${method}`)
+    return handler(method === "describe" ? {} : { sessionID, input: toolInput }, { signal, error: (type, message, data) => ({ error: type, message, data }) })
   }
 
   /** Runs `/slack-status` and returns the synthetic message it posted. */
@@ -274,6 +323,9 @@ export function fakeHost(input: FakeHostInput = {}) {
     commands,
     skills,
     rpc,
+    rpcs,
+    hooks,
+    script,
     status,
     slashStatus,
     failLists: () => void (failLists = true),

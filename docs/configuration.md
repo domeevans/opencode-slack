@@ -30,13 +30,35 @@ Every option is optional. Pass options in the object form of a `plugins` entry:
 | Option | Default | Rule |
 | --- | --- | --- |
 | `oauth.client_id` | Not set: the client ID saved in the `/connect` Slack app entry is used | A non-empty string without spaces. The client ID is public. Find it under **Basic Information → App Credentials** in your Slack app. When set, it wins over `/connect`, and `/connect` shows no Slack app entry. |
-| `oauth.redirect_uri` | `http://localhost:8765/callback` | An `http:` URL on host `localhost` or `127.0.0.1`, with an explicit port and a path. No user name, password, query or fragment. It must exactly match a redirect URL registered in the Slack app. OpenCode listens for the sign-in callback on this port. |
+| `oauth.redirect_uri` | `http://localhost:8765/callback` | Either a loopback `http:` URL on host `localhost` or `127.0.0.1` with an explicit port, or an `https:` URL on any host. Both need a path, and neither may have a user name, password, query or fragment. It must exactly match a redirect URL registered in the Slack app. See [The callback: loopback or hosted](#the-callback-loopback-or-hosted). |
+| `oauth.callback_port` | Not set | A whole number from 1 to 65535: the port of OpenCode's local callback listener on `127.0.0.1`. Required with an `https:` `oauth.redirect_uri`, and refused with a loopback one, whose own port is the listener's. |
 | `oauth.scopes` | `["channels:history", "channels:read", "search:read.public", "users:read"]` | A non-empty list of unique Slack user scopes, each without spaces. Your list replaces the default list. See [Scopes](#scopes). |
 | `oauth.client_secret` | Not set (public client with PKCE) | A non-empty string, and only together with `oauth.client_id`. Set it only for a Slack app that does not use PKCE, and only through `{env:NAME}`. See [Client secret](#client-secret). |
 | `server` | `slack` | Letters, digits, `_` and `-` only. This is the MCP server name. It is also the prefix of every Slack tool name and permission action (`<server>_<tool>`), the Code Mode namespace (`tools.<server>`), and part of the `/connect` entry ID (`<server>-app`). |
 | `allowUntestedHost` | `false` | `true` or `false`. If it is `true`, the plugin runs on an OpenCode version outside its tested range, and status keeps warning. See [Host check](#host-check). |
 
-Unknown keys are rejected, at the top level and inside `oauth`. There is no separate option for the callback port. Set the port through `oauth.redirect_uri`.
+Unknown keys are rejected, at the top level and inside `oauth`.
+
+### The callback: loopback or hosted
+
+After Slack approves a sign-in, it sends the browser to `oauth.redirect_uri` with a one-time code. OpenCode takes the code on a listener at `127.0.0.1`, on the path of `oauth.redirect_uri`, and only while a sign-in waits.
+
+- **Loopback, the default:** `http://localhost:<port>/<path>` or `http://127.0.0.1:<port>/<path>`. OpenCode listens on that port. This works when the browser runs on the same machine as OpenCode. Leave `oauth.callback_port` unset: with a loopback redirect it is refused, because OpenCode would listen on one port while Slack sends the browser to another.
+- **Hosted:** when OpenCode runs on another machine, such as a server, a container or a remote workspace, the browser cannot reach that machine's loopback. Set `oauth.redirect_uri` to an `https:` address the browser can reach, and `oauth.callback_port` to a free local port. A reverse proxy on OpenCode's machine forwards the address, with its path and query unchanged, to `http://127.0.0.1:<callback_port><path>`.
+
+  ```jsonc
+  "oauth": {
+    "client_id": "YOUR_SLACK_CLIENT_ID",
+    "redirect_uri": "https://host.example/oauth/return",
+    "callback_port": 8766
+  }
+  ```
+
+  The proxy then forwards `https://host.example/oauth/return?code=…&state=…` to `http://127.0.0.1:8766/oauth/return?code=…&state=…`. Status shows both in its `Callback` row.
+
+Whichever you use, add it to the Slack app's redirect URLs: see [Create the Slack app](#create-the-slack-app). Slack matches the host and port exactly, so register the address as the browser reaches it, path included.
+
+**Two sign-ins at once.** The listener holds its port while a sign-in waits. Two OpenCode processes on one machine that sign in at the same time with the default `http://localhost:8765/callback` collide, and the second sign-in fails because the port is in use. Finish one sign-in first, or give each process its own callback: another loopback port, such as `http://localhost:8767/callback`, or its own hosted address with its own `oauth.callback_port`. Register each one in the Slack app.
 
 ### Where the client ID comes from
 
@@ -58,9 +80,12 @@ The checks run in this order, and status reports only the first problem:
 | `options` | Plugin options must be an object. | Set options to an object, or remove them. |
 | any other top-level key | This option is not supported. | Remove it. Supported options: oauth, server, allowUntestedHost. |
 | `oauth` | Must be an object. | Set oauth to an object such as `{ "client_id": "..." }`. |
-| any other `oauth` key | This option is not supported. | Remove it. Supported oauth options: client_id, redirect_uri, scopes, client_secret. For a key that sets only the callback port, the next step is instead: Use oauth.redirect_uri instead, for example `http://localhost:8765/callback`. |
+| any other `oauth` key | This option is not supported. | Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret. For `redirect_port`, the next step is instead: Use oauth.redirect_uri instead, for example `http://localhost:8765/callback`. |
 | `oauth.client_id` | Must be a non-empty string without spaces. | Copy the client ID from the Basic Information page of your Slack app. |
-| `oauth.redirect_uri` | Must be a string. / Must be a valid URL. / Must use http:. / Must use the host localhost or 127.0.0.1. / Must include an explicit port. / Must not include credentials. / Must not include a query or fragment. / Must include a path, such as /callback. | Use the loopback URL registered in your Slack app, for example `http://localhost:8765/callback`. |
+| `oauth.redirect_uri` | Must be a string. / Must be a valid URL. / Must use http: or https:. / An http: URL must use the host localhost or 127.0.0.1. / An http: URL must include an explicit port. / Must not include credentials. / Must not include a query or fragment. / Must include a path, such as /callback. | Use a URL listed in the app's Redirect URLs, for example `http://localhost:8765/callback` or `https://host.example/oauth/return`. |
+| `oauth.callback_port` | Must be a whole number from 1 to 65535. | Set it to the local port that receives the forwarded callback, for example 8766. |
+| `oauth.callback_port` | Applies only to an https: oauth.redirect_uri. | Remove it: with a loopback oauth.redirect_uri, OpenCode listens on that URL's port. |
+| `oauth.callback_port` | Must be set with an https: oauth.redirect_uri. | Set it to the local port your proxy forwards the redirect to, for example 8766. |
 | `oauth.scopes` | Must be a non-empty list of scope names without spaces. | List Slack user scopes, for example `["channels:history","channels:read","search:read.public","users:read"]`. |
 | `oauth.scopes` | Lists a scope more than once. | Remove the duplicate scope. |
 | `oauth.client_secret` | Must be a non-empty string. | Set it to `{env:SLACK_CLIENT_SECRET}` and export that variable, or remove it to use PKCE. |
@@ -103,6 +128,17 @@ Someone who can create apps in your Slack workspace does this once for the organ
 3. Get the app approved if your workspace requires admin approval for apps. Keep the app internal to your organisation, or publish it in the Slack Marketplace. Slack refuses unlisted distributed apps.
 4. Copy the **Client ID** from **Basic Information → App Credentials**. You do not need the client secret, because the app uses PKCE.
 
+**Add a hosted callback.** For a [hosted callback](#the-callback-loopback-or-hosted), add its address to the app's redirect URLs as well: under **OAuth & Permissions → Redirect URLs**, choose **Add New Redirect URL**, or list it in the manifest's `oauth_config.redirect_urls` before you create the app:
+
+```json
+"redirect_urls": [
+  "http://localhost:8765/callback",
+  "https://host.example/oauth/return"
+]
+```
+
+Slack matches the host and port exactly: `https://host.example/oauth/return` does not cover `https://host.example:8443/oauth/return` or `https://www.host.example/oauth/return`. Add one entry per address that people sign in through, and one per extra loopback port.
+
 Turning on PKCE makes the app a public client. Slack cannot turn PKCE off again without its support team. To let agents do more, such as search private channels, read files or send messages, add scopes from the [scope table](#scopes).
 
 ## What the plugin registers
@@ -121,11 +157,11 @@ With a client ID, the plugin adds one MCP server under the name in `server`:
 }
 ```
 
-With a client secret, it also passes `client_secret`. It leaves out `protocol`, `timeout`, `headers` and `codemode`, so OpenCode's defaults apply: the classic MCP handshake and Code Mode on. Code Mode keeps Slack's tool schemas out of every turn. The model finds the tools as `tools.slack.<tool>` inside `execute`.
+With a client secret, it also passes `client_secret`. With an `https:` `oauth.redirect_uri`, it also passes `callback_port`, the port OpenCode's listener takes; with a loopback one it does not, and OpenCode listens on the redirect's own port. It leaves out `protocol`, `timeout`, `headers` and `codemode`, so OpenCode's defaults apply: the classic MCP handshake and Code Mode on. Code Mode keeps Slack's tool schemas out of every turn. The model finds the tools as `tools.slack.<tool>` inside `execute`.
 
 The plugin always sends `redirect_uri`. Without it, OpenCode would use `http://127.0.0.1:<port>/callback`, which does not match a Slack app registered with `http://localhost:8765/callback`.
 
-**In `/connect`:** OpenCode lists the server's own sign-in, which the plugin names **Slack**. Without `oauth.client_id` in the options, the plugin also adds **Slack app** (ID `slack-app`) for the client ID.
+**In `/connect`:** OpenCode lists the server's own sign-in, which the plugin names **Slack**. Without `oauth.client_id` in the options, the plugin also adds **Slack app** (ID `slack-app`) for the client ID. With it, there is no **Slack app** entry, and no status line or next step mentions one: nobody is asked to paste a client ID.
 
 **Name collision.** If your config already defines an MCP server with the same name, for example `mcp.servers.slack`, the plugin leaves it alone. Status then shows the state `not_registered` with the code `SERVER_NAME_IN_USE`. Remove your entry, or set `server` to another name.
 
@@ -280,11 +316,14 @@ Approving a write tool in OpenCode does not grant its Slack scope. Without the s
 | `server` | `name` and `url` |
 | `client` | `id`, `mode` (`public_pkce` or `confidential`) and `source` (`options` or `connect`), when there is a client |
 | `callback` | The redirect URI to register in the Slack app, when the plugin is set up |
+| `callbackPort` | OpenCode's local listener port, for an `https:` callback |
 | `scopes` | The requested scopes, when the plugin is set up |
 | `asksBefore` | What asks by default |
 | `tools` | Counts of `read`, `private`, `file` and `write` tools on the server, and the names of `unknown` tools |
 | `unguardedAgents` | Agents that would run an unknown Slack tool without asking |
 | `host` | `version`, tested `range` and `tested` |
+
+Scripts have a second RPC, `slack.workspace.tools`, which calls Slack's read tools with no model. It has its own error codes; see [Scripting](scripting.md).
 
 The text surfaces show the rows `Connection`, `Account`, `Access`, `Server`, `Client`, `Callback`, `Scopes`, `Tools`, `Agents without default rules`, `OpenCode` and `Next step`, in that order. The RPC has one error, `unavailable`. OpenCode does not record which Slack account signed in, and the plugin never reads tokens, so status has no account field. Slack shows the workspace and account on its sign-in page.
 

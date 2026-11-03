@@ -35,11 +35,15 @@ None yet.
 
 ## Signing in
 
-`jelly.signIns` declares two steps. First `app`: the key integration `slack-app`, your organisation's Slack app client ID, pasted once; the row links to [the app manifest](slack-app-manifest.json). Then `slack`, Slack's MCP server, which signs in with OAuth (`after: "app"`: until the app is in, its row reads After Slack app and offers nothing to press). The callback is fixed at `http://localhost:8765/callback`, so two agents signing in to Slack at once collide on that port.
+`jelly.signIns` declares two steps. First `app`: the key integration `slack-app`, your organisation's Slack app client ID, pasted once; the row links to [the app manifest](slack-app-manifest.json). Then `slack`, Slack's MCP server, which signs in with OAuth (`after: "app"`: until the app is in, its row reads After Slack app and offers nothing to press).
+
+**`presetBy`.** The `app` step declares `"presetBy": "oauth.client_id"`: a dotted path into the plugin's options. When the options Jelly gives the plugin set that path, for example from a deployment's own Slack app, the step is done: the plugin registers no `slack-app` integration, Jelly shows no row to paste into, and `slack`, which waits for `app`, can start at once, so the person only sees Slack. A Jelly whose sign-in schema lacks `presetBy` refuses this declaration, because that schema accepts no unknown keys.
+
+**The callback.** The default is `http://localhost:8765/callback`, which reaches only a browser on the engine's machine, and two agents signing in to Slack at once collide on that port. The plugin accepts an `https:` `oauth.redirect_uri` with an `oauth.callback_port`, so a deployment can send the browser to its host's return address, for example `https://<host>/oauth/return`, with a free port for each agent's engine. Add that address to the Slack app's Redirect URLs ([The callback: loopback or hosted](configuration.md#the-callback-loopback-or-hosted)).
 
 Jelly folds the declared sign-ins into this plugin's one card, which shows each as Connected, Not signed in or Sign in again (expired or revoked), and starts, renews and signs out of each. An agent's `jelly_connection_request`, or a tool result that names this plugin's "Run /connect and choose …" next step, opens the same card. The plugin still signs in through OpenCode, as it does without Jelly; the declaration only tells Jelly which of the engine's integrations and servers are this plugin's.
 
 ## Versions
 
-Jelly's curated catalogue pins an exact version. `latest` is `0.0.0`; publish each release
-under a new version so a review in Jelly can tell the two apart.
+Jelly's curated catalogue pins an exact version. Publish each release under a new version, so a
+review in Jelly can tell the two apart.

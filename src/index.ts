@@ -1,6 +1,7 @@
 import { Plugin } from "@opencode/plugin"
 import { registerAppIntegration, resolveClient, sameClient, serverNamer, type ClientState } from "./connect.js"
 import { isTestedHost } from "./host-version.js"
+import { registerToolsRpc } from "./host/tools-rpc.js"
 import { parseOptions } from "./options.js"
 import { insertDefaultRules } from "./permissions.js"
 import { SlackRpc } from "./rpc.js"
@@ -122,6 +123,12 @@ export default Plugin.define({
       },
     })
 
+    // Scripts call the known reads with no model, as a session and its agent. A user's own server under the name is
+    // not this plugin's. Invalid options or an untested host register no server, so no tools RPC either.
+    const stopTools = options === undefined
+      ? async () => {}
+      : await registerToolsRpc(ctx, { mcp: { server: options.server, managed: () => !nameInUse } })
+
     await ctx.command.transform((editor) => {
       editor.add({
         name: "slack-status",
@@ -136,6 +143,7 @@ export default Plugin.define({
     return async () => {
       stopped.abort()
       await cleanup()
+      await stopTools()
     }
   },
 })

@@ -168,6 +168,28 @@ describe("buildStatus details", () => {
     })
   })
 
+  test("an https callback carries its listener port, and the row says where to forward it", () => {
+    const parsed = parseOptions({ oauth: { client_id: "C1", redirect_uri: "https://host.example/oauth/return", callback_port: 49200 } })
+    const status = buildStatus(input({ parsed }))
+    expect(status).toMatchObject({ callback: "https://host.example/oauth/return", callbackPort: 49200 })
+    expect(statusRows(status).find((row) => row.label === "Callback")?.value)
+      .toBe("https://host.example/oauth/return (register exactly this URL in the app's Redirect URLs, and forward it to http://127.0.0.1:49200/oauth/return, where OpenCode listens)")
+  })
+
+  test("a loopback callback has no listener port", () => {
+    expect(Object.keys(buildStatus(input()))).not.toContain("callbackPort")
+  })
+
+  test("with the client ID in the options, no state asks anyone to paste one", () => {
+    const sameClient = STATES.filter(([, given]) => given.parsed.ok && given.active && given.client.client !== undefined)
+    expect(sameClient.length).toBeGreaterThan(5)
+    for (const [label, given] of sameClient) {
+      const status = buildStatus({ ...given, client: C1 })
+      expect({ label, text: formatStatus(status).includes("Slack app") }).toEqual({ label, text: false })
+      expect({ label, next: status.next.includes("paste") }).toEqual({ label, next: false })
+    }
+  })
+
   test("invalid options show no client, callback or scopes", () => {
     const status = buildStatus(input({ parsed: INVALID, active: false }))
     expect(Object.keys(status)).not.toContain("client")
@@ -290,7 +312,7 @@ describe("formatStatus", () => {
       'Access: Reads run without asking. Asks before searching private channels; reading files; writes: messages, drafts, schedules, reactions, canvases, lists, new conversations and file uploads; Slack tools this plugin does not know yet. To allow one, choose "Always allow" when asked, or add a permissions rule such as { "action": "slack_slack_read_file", "resource": "*", "effect": "allow" }.',
       "Server: slack at https://mcp.slack.com/mcp",
       "Client: C1 (public, PKCE; set in plugin options)",
-      "Callback: http://localhost:8765/callback (register exactly this URL in the Slack app)",
+      "Callback: http://localhost:8765/callback (register exactly this URL in the app's Redirect URLs)",
       "Scopes: channels:history channels:read search:read.public users:read",
       "Tools: 0 read, 0 private search, 0 file, 0 write",
       "OpenCode: 2.2.3 (tested; tested range >=2.2.3 <2.3.0)",
@@ -357,6 +379,13 @@ describe("the status RPC contract", () => {
       expect(JSON.parse(JSON.stringify(status))).toEqual(status)
       expect(isStatus(status)).toBe(true)
     }
+  })
+
+  test("an https callback with its listener port matches the output schema", () => {
+    const parsed = parseOptions({ oauth: { client_id: "C1", redirect_uri: "https://host.example/oauth/return", callback_port: 49200 } })
+    const status = buildStatus(input({ parsed }))
+    expect(status.callbackPort).toBe(49200)
+    expect(problems(status, output)).toEqual([])
   })
 
   test.each([

@@ -1,9 +1,11 @@
-import { DEFAULT_REDIRECT_URI, DEFAULT_SCOPES, DEFAULT_SERVER } from "./defaults.js"
+import { CALLBACK_PORT_EXAMPLE, DEFAULT_REDIRECT_URI, DEFAULT_SCOPES, DEFAULT_SERVER, HOSTED_REDIRECT_EXAMPLE } from "./defaults.js"
 
 export interface Options {
   /** Pins the Slack app, for example in an organisation's managed config. Otherwise the /connect Slack app entry sets it. */
   readonly clientId?: string
   readonly redirectUri: string
+  /** The local port OpenCode's callback listener uses. Set only, and always, with an `https:` redirect. */
+  readonly callbackPort?: number
   readonly scopes: readonly string[]
   readonly clientSecret?: string
   readonly server: string
@@ -23,7 +25,7 @@ export type ParsedOptions =
   | { readonly ok: false; readonly error: OptionsError }
 
 const TOP_KEYS = ["oauth", "server", "allowUntestedHost"]
-const OAUTH_KEYS = ["client_id", "redirect_uri", "scopes", "client_secret"]
+const OAUTH_KEYS = ["client_id", "redirect_uri", "callback_port", "scopes", "client_secret"]
 const SERVER_NAME = /^[A-Za-z0-9_-]+$/
 const NO_SPACES = /^\S+$/
 
@@ -33,6 +35,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const fail = (field: string, message: string, next: string): ParsedOptions =>
   ({ ok: false, error: { code: "OPTIONS_INVALID", field, message, next } })
 
+/**
+ * A loopback `http:` redirect, where OpenCode listens on the URL's own port, or an `https:` one that a proxy
+ * forwards to OpenCode's listener on `oauth.callback_port`. Both need a path, which the listener matches.
+ */
 function redirectProblem(value: string): string | undefined {
   let url: URL
   try {
@@ -40,14 +46,18 @@ function redirectProblem(value: string): string | undefined {
   } catch {
     return "Must be a valid URL."
   }
-  if (url.protocol !== "http:") return "Must use http:."
-  if (url.hostname !== "localhost" && url.hostname !== "127.0.0.1") return "Must use the host localhost or 127.0.0.1."
-  if (url.port === "") return "Must include an explicit port."
+  if (url.protocol !== "http:" && url.protocol !== "https:") return "Must use http: or https:."
+  if (url.protocol === "http:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
+    return "An http: URL must use the host localhost or 127.0.0.1."
+  }
+  if (url.protocol === "http:" && url.port === "") return "An http: URL must include an explicit port."
   if (url.username !== "" || url.password !== "") return "Must not include credentials."
   if (value.includes("?") || value.includes("#")) return "Must not include a query or fragment."
   if (url.pathname === "/") return "Must include a path, such as /callback."
   return undefined
 }
+
+const isPort = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 65535
 
 export function parseOptions(input: unknown): ParsedOptions {
   const raw = input ?? {}
@@ -74,7 +84,19 @@ export function parseOptions(input: unknown): ParsedOptions {
   const redirectUri = oauth.redirect_uri ?? DEFAULT_REDIRECT_URI
   const redirectError = typeof redirectUri === "string" ? redirectProblem(redirectUri) : "Must be a string."
   if (typeof redirectUri !== "string" || redirectError !== undefined) {
-    return fail("oauth.redirect_uri", redirectError ?? "Must be a string.", `Use the loopback URL registered in your Slack app, for example ${DEFAULT_REDIRECT_URI}.`)
+    return fail("oauth.redirect_uri", redirectError ?? "Must be a string.", `Use a URL listed in the app's Redirect URLs, for example ${DEFAULT_REDIRECT_URI} or ${HOSTED_REDIRECT_EXAMPLE}.`)
+  }
+
+  const hosted = new URL(redirectUri).protocol === "https:"
+  const callbackPort = oauth.callback_port
+  if (callbackPort !== undefined && !isPort(callbackPort)) {
+    return fail("oauth.callback_port", "Must be a whole number from 1 to 65535.", `Set it to the local port that receives the forwarded callback, for example ${CALLBACK_PORT_EXAMPLE}.`)
+  }
+  if (callbackPort !== undefined && !hosted) {
+    return fail("oauth.callback_port", "Applies only to an https: oauth.redirect_uri.", "Remove it: with a loopback oauth.redirect_uri, OpenCode listens on that URL's port.")
+  }
+  if (callbackPort === undefined && hosted) {
+    return fail("oauth.callback_port", "Must be set with an https: oauth.redirect_uri.", `Set it to the local port your proxy forwards the redirect to, for example ${CALLBACK_PORT_EXAMPLE}.`)
   }
 
   const scopes: unknown = oauth.scopes ?? DEFAULT_SCOPES
@@ -107,6 +129,7 @@ export function parseOptions(input: unknown): ParsedOptions {
     options: {
       ...(clientId === undefined ? {} : { clientId }),
       redirectUri,
+      ...(callbackPort === undefined ? {} : { callbackPort }),
       scopes: [...scopes],
       ...(clientSecret === undefined ? {} : { clientSecret }),
       server,

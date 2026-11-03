@@ -213,7 +213,7 @@ describe("the dialog", () => {
       + (value.tools.unknown.length > 0 ? `; unknown (ask first): ${value.tools.unknown.join(", ")}` : ""))
     expect(lines.at(-1)).toBe("r refresh · esc close")
     expect(lines.filter((line) => line.startsWith("Client "))).toEqual(value.client === undefined ? [] : ["Client TEST_CLIENT_ID (public, PKCE; set in plugin options)"])
-    expect(lines.filter((line) => line.startsWith("Callback "))).toEqual(value.callback === undefined ? [] : ["Callback http://localhost:8765/callback (register exactly this URL in the Slack app)"])
+    expect(lines.filter((line) => line.startsWith("Callback "))).toEqual(value.callback === undefined ? [] : ["Callback http://localhost:8765/callback (register exactly this URL in the app's Redirect URLs)"])
   })
 
   test("r refreshes and shows the new status", async () => {

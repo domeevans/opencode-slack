@@ -17,12 +17,23 @@ interface Rule {
   readonly except?: Readonly<Record<string, string>>
 }
 
+/**
+ * The one allowed permission hook: the tools RPC's `evaluate` hook. No one is there to answer a script's prompt, so it
+ * turns an ask on one of the RPC's own calls in flight into a deny. It only tightens, and leaves every other call alone.
+ */
+const EVALUATE_HOOK_FILE = "src/host/tools-rpc.ts"
+
 const RULES: readonly Rule[] = [
   { name: "ctx.mcp.catalog", pattern: /mcp\.catalog/, example: "await ctx.mcp.catalog()" },
   { name: "ctx.mcp.attest", pattern: /mcp\.attest/, example: "ctx.mcp.attest(entry)" },
   { name: "supports* markers", pattern: /\bsupports[A-Z]/, example: "if (ctx.permission.supportsCancellation) {}" },
   { name: "a second argument to permission.assert", pattern: /permission\.assert\([^)]*,/, example: "await ctx.permission.assert(input, { signal })" },
-  { name: "tool options.mcp delegation", pattern: /options\.mcp\b/, example: "tool.options.mcp = server" },
+  {
+    name: "tool options.mcp delegation",
+    pattern: /options\.mcp\b/,
+    example: "tool.options.mcp = server",
+    except: { "test/unit/tools-rpc.test.ts": "the shared module's test reads its own fake's option, not a tool's delegation" },
+  },
   {
     name: "config capabilities",
     pattern: /\bcapabilities\b/,
@@ -34,7 +45,12 @@ const RULES: readonly Rule[] = [
   { name: "ctx.generate.text", pattern: /generate\.text/, example: "await ctx.generate.text(prompt)" },
   { name: "experimental.policies", pattern: /experimental\.policies/, example: "experimental.policies.push(policy)" },
   { name: "ctx.experimental.artifact", pattern: /\bexperimental\s*\??\.\s*artifact\b/, example: "await ctx.experimental?.artifact.create(file)" },
-  { name: "ctx.permission.hook", pattern: /permission\.hook/, example: "ctx.permission.hook(escalate)" },
+  {
+    name: "ctx.permission.hook",
+    pattern: /permission\.hook/,
+    example: "ctx.permission.hook(escalate)",
+    except: { [EVALUATE_HOOK_FILE]: "the tools RPC's one evaluate hook, which only turns an ask on its own script calls in flight into a deny" },
+  },
   { name: "@opencode-ai/plugin", pattern: /@opencode-ai\/plugin/, example: "import { tool } from \"@opencode-ai/plugin\"" },
   { name: "@opencode/ai imports", pattern: /(["'`])@opencode\/ai(?:\/[^"'`\s]*)?\1/, example: "import { generate } from \"@opencode/ai/provider\"" },
   { name: "a server() export", pattern: /\bexport\s+(?:async\s+)?(?:function|const|let)\s+server\b/, example: "export async function server(input) {}" },
@@ -79,6 +95,11 @@ describe("forbidden APIs", () => {
 
   test("the public host API is not flagged", () => {
     for (const line of ALLOWED) expect({ line, flagged: RULES.filter((rule) => rule.pattern.test(line)).map((rule) => rule.name) }).toEqual({ line, flagged: [] })
+  })
+
+  test("the tools RPC has exactly one permission hook, the evaluate hook", () => {
+    const lines = readFileSync(join(REPO, EVALUATE_HOOK_FILE), "utf8").split("\n").filter((line) => /permission\.hook/.test(line))
+    expect(lines.map((line) => line.trim())).toEqual([`const hook = await ctx.permission.hook("evaluate", (evaluation) => {`])
   })
 
   test("every exception names a file that exists", () => {

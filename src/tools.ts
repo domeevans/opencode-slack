@@ -37,6 +37,12 @@ const KNOWN: Readonly<Record<string, Exclude<ToolClass, "unknown">>> = {
 
 export const READ_TOOLS: readonly string[] = Object.keys(KNOWN).filter((tool) => KNOWN[tool] === "read")
 
+/** The classes whose tools only read, so a script may call them. Private search and file reads still ask by default. */
+const SCRIPTABLE_CLASSES: readonly ToolClass[] = ["read", "private", "file"]
+
+/** The tools a script may call through the tools RPC: every known read. Writes and unknown tools never are. */
+export const SCRIPTABLE_TOOLS: readonly string[] = Object.keys(KNOWN).filter((tool) => SCRIPTABLE_CLASSES.includes(KNOWN[tool]!))
+
 export function classify(tool: string): ToolClass {
   return Object.hasOwn(KNOWN, tool) ? KNOWN[tool]! : "unknown"
 }

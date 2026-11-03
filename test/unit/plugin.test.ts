@@ -26,7 +26,8 @@ const until = async (condition: () => boolean | Promise<boolean>) => {
 
 // The `/connect` rename of the Slack server's integration runs in the background, so these leave it out.
 const registrations = (calls: readonly string[]) => calls.filter((call) => call !== "integration.transform")
-const FULL = ["mcp.transform", "agent.transform", "skill.transform", "rpc.register", "command.transform"]
+// The status RPC, then the tools RPC and its evaluate hook.
+const FULL = ["mcp.transform", "agent.transform", "skill.transform", "rpc.register", "rpc.register", "evaluate hook", "command.transform"]
 const STATUS_ONLY = ["rpc.register", "command.transform"]
 const CONNECT = {}
 const stored = (key: string, metadata?: Record<string, string>) => ({ type: "key" as const, key, ...(metadata ? { metadata } : {}) })
@@ -41,10 +42,11 @@ test("the plugin ID is slack.workspace", () => {
 })
 
 describe("setup with a client ID in the options", () => {
-  test("registers the server, the default rules, the skills, the RPC and /slack-status, in that order", async () => {
+  test("registers the server, the default rules, the skills, the RPCs and /slack-status, in that order", async () => {
     const host = await setUp()
     expect(registrations(host.calls)).toEqual(FULL)
     expect(host.rpc.id).toBe("slack.workspace")
+    expect([...host.rpcs.keys()]).toEqual(["slack.workspace", "slack.workspace.tools"])
     expect(host.commands.map((command) => command.name)).toEqual(["slack-status"])
     expect(host.commands[0]?.description).toBe("Show Slack sign-in, connection and permission status")
     expect(host.skills.map((skill) => skill.id)).toEqual(["slack-search"] as never)
@@ -67,6 +69,32 @@ describe("setup with a client ID in the options", () => {
     await Bun.sleep(20)
     expect(host.calls).not.toContain("mcp.reload")
     expect(host.servers.get("slack")).toMatchObject({ oauth: { client_id: "C1" } })
+  })
+
+  test("asks nobody to paste a client ID: no Slack app in /connect, status or its next step, in any connection state", async () => {
+    for (const status of [{ status: "pending" }, { status: "needs_auth", error: "Authentication required" }, { status: "failed", error: "boom" }, { status: "disabled" }, { status: "connected" }] as const) {
+      const host = await setUp({ options: { oauth: { client_id: "C1" } }, status: { slack: status } })
+      expect([...host.integrations.keys()].filter((id) => id.endsWith("-app"))).toEqual([])
+      const text = (await host.slashStatus()).text
+      expect({ status: status.status, mentions: text.includes("Slack app") }).toEqual({ status: status.status, mentions: false })
+      expect(await host.status()).toMatchObject({ client: { source: "options" } })
+      await host.dispose()
+    }
+  })
+
+  test("an https redirect registers the server with it and the callback port", async () => {
+    const host = await setUp({ options: { oauth: { client_id: "C1", redirect_uri: "https://host.example/oauth/return", callback_port: 49200 } } })
+    expect(host.servers.get("slack")).toStrictEqual({
+      type: "remote",
+      url: "https://mcp.slack.com/mcp",
+      oauth: {
+        client_id: "C1",
+        redirect_uri: "https://host.example/oauth/return",
+        callback_port: 49200,
+        scope: "channels:history channels:read search:read.public users:read",
+      },
+    })
+    expect(await host.status()).toMatchObject({ callback: "https://host.example/oauth/return", callbackPort: 49200 })
   })
 
   test("names the Slack server's integration Slack in /connect", async () => {

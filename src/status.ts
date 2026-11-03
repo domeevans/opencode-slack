@@ -37,6 +37,8 @@ export interface Status {
   readonly server: { readonly name: string; readonly url: string }
   readonly client?: { readonly id: string; readonly mode: "public_pkce" | "confidential"; readonly source: "options" | "connect" }
   readonly callback?: string
+  /** OpenCode's local listener port for an `https:` callback. */
+  readonly callbackPort?: number
   readonly scopes?: readonly string[]
   readonly asksBefore: readonly string[]
   readonly tools: {
@@ -154,6 +156,7 @@ export function buildStatus(input: StatusInput): Status {
         client: { id: client.id, mode: client.secret === undefined ? "public_pkce" as const : "confidential" as const, source: client.source },
       }),
       callback: options.redirectUri,
+      ...(options.callbackPort === undefined ? {} : { callbackPort: options.callbackPort }),
       scopes: options.scopes,
     }),
     asksBefore: ASKS_BEFORE,
@@ -195,6 +198,13 @@ export function buildStatus(input: StatusInput): Status {
   return { ...base, ...connection(server, status, unguardedAgents, names.length) }
 }
 
+/** The callback to register, and for an `https:` one where its proxy forwards it: OpenCode's listener, same path. */
+function callbackRow(callback: string, port: number | undefined): string {
+  const register = "register exactly this URL in the app's Redirect URLs"
+  if (port === undefined) return `${callback} (${register})`
+  return `${callback} (${register}, and forward it to http://127.0.0.1:${port}${new URL(callback).pathname}, where OpenCode listens)`
+}
+
 const CLIENT_SOURCE = { options: "set in plugin options", connect: "saved in /connect" } as const
 
 /** The connection label people see. The RPC keeps the `state` ids. */
@@ -232,7 +242,7 @@ export function statusRows(status: Status): { readonly label: string; readonly v
     const mode = status.client.mode === "public_pkce" ? "public, PKCE" : "confidential, secret set"
     rows.push({ label: "Client", value: `${status.client.id} (${mode}; ${CLIENT_SOURCE[status.client.source]})` })
   }
-  if (status.callback !== undefined) rows.push({ label: "Callback", value: `${status.callback} (register exactly this URL in the Slack app)` })
+  if (status.callback !== undefined) rows.push({ label: "Callback", value: callbackRow(status.callback, status.callbackPort) })
   if (status.scopes !== undefined) rows.push({ label: "Scopes", value: status.scopes.join(" ") })
   rows.push({
     label: "Tools",

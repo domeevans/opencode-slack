@@ -5,9 +5,10 @@ import { existsSync, readdirSync } from "node:fs"
 import { join, sep } from "node:path"
 import { defaultRules, type Rule } from "../../src/permissions.js"
 import type { Status } from "../../src/status.js"
+import { KNOWN_READS, TOOLS_RPC_ID } from "../../src/host/tools-rpc.js"
 import { classify } from "../../src/tools.js"
-import { FAKE_TOOLS } from "./fake-slack-mcp.js"
-import { CLIENT_ID, repositoryChanges, USER_SERVER, type Host, type Project } from "./harness.js"
+import { FAKE_INPUT, FAKE_TOOLS, UPSTREAM_FAILURE } from "./fake-slack-mcp.js"
+import { CLIENT_ID, HOSTED_OAUTH, repositoryChanges, USER_SERVER, type Host, type Project } from "./harness.js"
 import type { Outcome } from "./probe/index.js"
 
 interface ProbeState {
@@ -145,6 +146,125 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
       })
     })
 
+    describe("the tools RPC", () => {
+      const sessions: Record<string, string> = {}
+      const permission = (action: string, effect: Rule["effect"]): Rule => ({ action, resource: "*", effect })
+      /** A tools RPC call's output, or its error's `{ type, code, message }`. */
+      const script = async (method: string, input: unknown, project: Project = "defaults"): Promise<Record<string, any>> => {
+        try {
+          return { value: await call(TOOLS_RPC_ID, method, project, input as object) }
+        } catch (error) {
+          const e = error as Record<string, any>
+          return { type: e.type ?? e._tag, code: e.data?.code, message: String(e.message ?? e) }
+        }
+      }
+      const run = (session: string, method: string, input: unknown = {}, project: Project = "defaults") =>
+        script(method, { sessionID: sessions[session] ?? session, input }, project)
+      const since = (from: number) => host.toolCalls().slice(from)
+
+      beforeAll(async () => {
+        expect((await discovered("defaults")).state).toBe("connected")
+        const create = async (input: Record<string, unknown>, project: Project = "defaults") =>
+          (await host.client.session.create({ title: "script", ...at(project), ...input } as never)).id
+        sessions.build = await create({ agent: "build" })
+        sessions.locked = await create({ agent: "locked" })
+        sessions.agentless = await create({})
+        // Session rules come after the agent's: one narrows build, one allows build the reads that ask, one reopens a
+        // read for locked.
+        sessions.narrow = await create({ agent: "build", permissions: [permission("slack_slack_search_public", "deny")] })
+        sessions.allowed = await create({
+          agent: "build",
+          permissions: [permission("slack_slack_search_public_and_private", "allow"), permission("slack_slack_read_file", "allow")],
+        })
+        sessions.reopen = await create({ agent: "locked", permissions: [permission("slack_slack_read_thread", "allow")] })
+        sessions.collision = await create({ agent: "build" }, "collision")
+      }, 60_000)
+
+      test("describes exactly the known reads, with their live schemas; no write, send or unknown tool is a method", async () => {
+        const { value } = await script("describe", {})
+        expect(value.id).toBe(TOOLS_RPC_ID)
+        expect(value.methods.map((method: { name: string }) => method.name)).toEqual([...KNOWN_READS])
+        for (const method of value.methods) expect({ ...method, description: undefined, output: undefined }).toEqual({ name: method.name, tool: `slack_${method.name}`, kind: "mcp", action: `slack_${method.name}`, available: true, input: FAKE_INPUT, description: undefined, output: undefined })
+        const from = host.toolCalls().length
+        const excluded = FAKE_TOOLS.filter((tool) => ["write", "unknown"].includes(classify(tool)))
+        expect(excluded.length).toBe(14)
+        for (const tool of excluded) {
+          const refused = await run("build", tool, { query: "q" })
+          expect({ tool, type: refused.type, notFound: /not.?found|unknown/i.test(refused.message) }).toEqual({ tool, type: expect.not.stringMatching(/^failed$/), notFound: true })
+        }
+        expect(since(from)).toEqual([])
+      })
+
+      test("runs a known read as a session whose agent allows it, with no model turn", async () => {
+        const from = host.toolCalls().length
+        expect(await run("build", "slack_search_public", { query: "hello" })).toEqual({
+          value: { output: { tool: "slack_search_public", arguments: { query: "hello" } }, text: `slack_search_public: {"query":"hello"}` },
+        })
+        expect(since(from)).toEqual(["slack_search_public"])
+        const session = await host.client.session.get({ sessionID: sessions.build! })
+        expect(session.outcome).toBeUndefined()
+        expect(session.tokens).toMatchObject({ input: 0, output: 0 })
+      })
+
+      test("refuses a session whose agent denies Slack, before Slack is called", async () => {
+        const from = host.toolCalls().length
+        expect(await run("locked", "slack_search_public", { query: "q" })).toMatchObject({ type: "failed", code: "PERMISSION_DENIED" })
+        expect(since(from)).toEqual([])
+      })
+
+      test("refuses the private search and the file read, which ask by default, at once and with no prompt left waiting", async () => {
+        const from = host.toolCalls().length
+        for (const method of ["slack_search_public_and_private", "slack_read_file"]) {
+          const started = Date.now()
+          const result = await run("build", method, { query: "q" })
+          expect(result).toMatchObject({ type: "failed", code: "PERMISSION_DENIED" })
+          expect(result.message).toMatch(/cannot answer an approval prompt/)
+          expect(Date.now() - started).toBeLessThan(5000)
+        }
+        const { data: pending } = await host.client.permission.request.list(at("defaults"))
+        expect(pending.filter((request) => JSON.stringify(request).includes(sessions.build!))).toEqual([])
+        expect(since(from)).toEqual([])
+      })
+
+      test("applies the session's rules after the agent's: an allow rule opens the reads that ask", async () => {
+        const from = host.toolCalls().length
+        expect(await run("narrow", "slack_search_public", { query: "q" })).toMatchObject({ type: "failed", code: "PERMISSION_DENIED" })
+        expect((await run("narrow", "slack_read_channel", {})).value).toMatchObject({ output: { tool: "slack_read_channel" } })
+        expect((await run("allowed", "slack_search_public_and_private", { query: "q" })).value).toMatchObject({ output: { tool: "slack_search_public_and_private" } })
+        expect((await run("allowed", "slack_read_file", {})).value).toMatchObject({ output: { tool: "slack_read_file" } })
+        expect((await run("reopen", "slack_read_thread", {})).value).toMatchObject({ output: { tool: "slack_read_thread" } })
+        expect(await run("reopen", "slack_read_channel", {})).toMatchObject({ type: "failed", code: "PERMISSION_DENIED" })
+        expect(since(from)).toEqual(["slack_read_channel", "slack_search_public_and_private", "slack_read_file", "slack_read_thread"])
+      })
+
+      test("gives Slack's own error as UPSTREAM_ERROR: its first line, with the signed URL redacted", async () => {
+        const result = await run("build", "slack_search_channels", { query: "fail" })
+        expect(result).toMatchObject({ type: "failed", code: "UPSTREAM_ERROR" })
+        expect(result.message).toContain("https://files.slack.example/f.pdf?[redacted]")
+        for (const hidden of ["fake-signature-123", "second line"]) expect(result.message).not.toContain(hidden)
+        expect(UPSTREAM_FAILURE).toContain("fake-signature-123")
+      })
+
+      test("refuses with SERVER_CONFLICT while the user's own server holds the name", async () => {
+        expect(await run("collision", "slack_search_public", { query: "q" }, "collision")).toMatchObject({ type: "failed", code: "SERVER_CONFLICT" })
+        const { value } = await script("describe", {}, "collision")
+        expect(value.methods.every((method: { available: boolean; reason: string }) => !method.available && method.reason === "SERVER_CONFLICT")).toBe(true)
+      })
+
+      test("names an unknown session, a session without an agent, and rejects an envelope with extra keys", async () => {
+        expect(await run("ses_does_not_exist", "slack_search_public", { query: "q" })).toMatchObject({ type: "failed", code: "SESSION_UNKNOWN" })
+        expect(await run("agentless", "slack_search_public", { query: "q" })).toMatchObject({ type: "failed", code: "SESSION_AGENT_REQUIRED" })
+        const from = host.toolCalls().length
+        for (const envelope of [{ sessionID: sessions.build, input: { query: "q" }, extra: true }, { input: { query: "q" } }, { sessionID: sessions.build, input: "q" }])
+          expect(await script("slack_search_public", envelope)).toMatchObject({ type: "rpc.invalid_input" })
+        expect(since(from)).toEqual([])
+      })
+
+      test("is not registered for invalid options", async () => {
+        expect(await script("describe", {}, "invalid")).toMatchObject({ type: "rpc.unavailable", message: `RPC is unavailable: ${TOOLS_RPC_ID}` })
+      })
+    })
+
     describe("user permissions", () => {
       test.each(["build", "custom"])("V2: a user allow for slack_slack_send_message wins for %s", async (agent) => {
         expect((await check("rules", agent, "slack_send_message")).outcome).toBe("allow")
@@ -195,6 +315,19 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         expect(agents.map((agent) => catchAlls(agent.permissions)).every((n) => n === 0)).toBe(true)
         expect((await host.client.skill.list(at("invalid"))).data.map((skill) => skill.id)).not.toContain("slack-search")
         expect(await slashStatus("invalid")).toStartWith("Slack\nConnection: not configured. OPTIONS_INVALID: ")
+      })
+    })
+
+    describe("an https redirect", () => {
+      test("registers the server with the redirect and the callback port, which the host accepts", async () => {
+        expect((await probe("hosted")).registered).toStrictEqual({
+          type: "remote",
+          url: "https://mcp.slack.com/mcp",
+          oauth: { client_id: CLIENT_ID, ...HOSTED_OAUTH, scope: "channels:history channels:read search:read.public users:read" },
+        })
+        expect(await status("hosted")).toMatchObject({ state: "disabled", callback: HOSTED_OAUTH.redirect_uri, callbackPort: HOSTED_OAUTH.callback_port })
+        expect((await host.client.integration.list(at("hosted"))).data.map((item) => item.id)).not.toContain("slack-app")
+        expect(await slashStatus("hosted")).not.toContain("Slack app")
       })
     })
 

@@ -46,6 +46,26 @@ describe("serverConfig", () => {
     expect(config).toMatchObject({ oauth: { redirect_uri: "http://127.0.0.1:9000/oauth", scope: "search:read.public search:read.private files:read" } })
   })
 
+  test("an https redirect with a callback port gives both, and nothing else changes", () => {
+    const hosted = options({ oauth: { redirect_uri: "https://host.example/oauth/return", callback_port: 49200 } })
+    expect(serverConfig(hosted, C1)).toStrictEqual({
+      type: "remote",
+      url: "https://mcp.slack.com/mcp",
+      oauth: {
+        client_id: "C1",
+        redirect_uri: "https://host.example/oauth/return",
+        callback_port: 49200,
+        scope: "channels:history channels:read search:read.public users:read",
+      },
+    })
+  })
+
+  test("a loopback redirect sets no callback port, so OpenCode listens on the redirect's own port", () => {
+    const oauthKeys = (config: ReturnType<typeof serverConfig>) => Object.keys((config as { oauth: object }).oauth)
+    expect(oauthKeys(serverConfig(options({ oauth: { redirect_uri: "http://127.0.0.1:9000/oauth" } }), C1))).not.toContain("callback_port")
+    expect(oauthKeys(serverConfig(PUBLIC, C1))).not.toContain("callback_port")
+  })
+
   test("leaves protocol, timeouts, headers and Code Mode to the host", () => {
     expect(Object.keys(serverConfig(PUBLIC, { ...C1, secret: "s" })).sort()).toEqual(["oauth", "type", "url"])
   })

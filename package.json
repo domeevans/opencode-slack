@@ -1,6 +1,6 @@
 {
   "name": "@joe-broadhead/opencode-slack",
-  "version": "0.0.0",
+  "version": "0.0.2",
   "description": "Unofficial OpenCode plugin for Slack",
   "keywords": [
     "opencode",
@@ -232,6 +232,7 @@
         "id": "app",
         "label": "Slack app",
         "integration": "slack-app",
+        "presetBy": "oauth.client_id",
         "help": {
           "url": "https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/slack-app-manifest.json",
           "label": "Create the Slack app from its manifest, then paste its client ID"
