@@ -15,7 +15,7 @@ import { fakeHost } from "./fakes.js"
  */
 
 type Tool = { name: string; permission: string; effect: string; readOnly: boolean }
-type SignIn = { id: string; label: string; integration?: string; server?: string; after?: string; presetBy?: string; help?: { url: string; label: string } }
+type SignIn = { id: string; label: string; integration?: string; server?: string; after?: string; presetBy?: string; help?: { url: string; label: string }; relay?: Record<string, string> }
 const manifest = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { files: string[]; jelly: { summary: string; icon: string; tools: Tool[]; skills: string[]; signIns: SignIn[] } }
 const jelly = manifest.jelly
 const rules: readonly { action: string; resource: string; effect: string }[] = [{ action: "*", resource: "*", effect: "allow" }, ...defaultRules("slack")]
@@ -71,7 +71,15 @@ describe("the jelly declaration", () => {
     test("declare the Slack app's /connect entry, then the server that waits for it, under the names /connect shows", () => {
       expect(jelly.signIns.length).toBe(2)
       expect(app).toMatchObject({ id: "app", label: appDisplayName(DEFAULT_SERVER), integration: appIntegrationID(DEFAULT_SERVER) })
-      expect(slack).toEqual({ id: "slack", label: serverDisplayName(DEFAULT_SERVER), server: DEFAULT_SERVER, after: "app" })
+      expect(slack).toEqual({ id: "slack", label: serverDisplayName(DEFAULT_SERVER), server: DEFAULT_SERVER, after: "app", relay: {} })
+    })
+
+    test("Slack's own sign-in may come back through Jelly's relay; the docs give its address, and the default manifest trusts only the loopback", () => {
+      const appManifest = JSON.parse(readFileSync(new URL("../../docs/slack-app-manifest.json", import.meta.url), "utf8")) as { oauth_config: { redirect_urls: string[] } }
+      const doc = readFileSync(new URL("../../docs/jelly.md", import.meta.url), "utf8")
+      expect(slack?.relay).toEqual({})
+      expect(appManifest.oauth_config.redirect_urls).toEqual(["http://localhost:8765/callback"])
+      expect(doc).toContain("https://id.toqanjelly.ai/connect/callback")
     })
 
     test("the app step is preset by the option that pins the client, so that client is used and no entry is registered", async () => {

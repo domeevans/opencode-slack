@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Added
 
 - Jelly shows the plugin's one-line summary and icon: `jelly.summary`, and `jelly.icon`, a speech bubble on a muted slate tile, shipped as `assets/icon.svg`.
+- In Jelly, a web tab can sign in to Slack through Jelly's sign-in relay: the `slack` sign-in declares `relay`, and `docs/jelly.md` gives the relay address to add to your Slack app. The app manifest still lists only the loopback address.
 
 ### Changed
 
