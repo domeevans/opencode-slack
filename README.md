@@ -207,7 +207,7 @@ A script's errors from the tools RPC have their own codes, listed in [Scripting]
 
 Sign out while the plugin is still installed: once it is removed, OpenCode no longer knows the `slack` server or the **Slack app** entry, so it cannot remove their credentials, and `opencode auth list` stops showing them.
 
-1. Sign out of Slack: `opencode mcp logout slack`.
+1. Sign out of Slack: `opencode mcp logout slack`. If it answers "MCP server not found" right after OpenCode starts, wait a few seconds and run it again.
 2. If you saved a client ID in `/connect`, remove it: `opencode auth logout slack-app`, and choose the **Slack app** account. Without a terminal, name it: `opencode auth logout slack-app "Slack app"`.
 3. Check: `opencode auth list` lists neither **Slack** nor **Slack app**.
 4. Remove the plugin: `opencode plugin remove @joe-broadhead/opencode-slack`, then `opencode reload`. `opencode mcp list` no longer lists `slack`.
