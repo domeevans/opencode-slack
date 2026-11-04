@@ -91,7 +91,7 @@ The checks run in this order, and status reports only the first problem:
 | `oauth.client_secret` | Must be a non-empty string. | Set it to `{env:SLACK_CLIENT_SECRET}` and export that variable, or remove it to use PKCE. |
 | `oauth.client_secret` | Needs oauth.client_id. | Set oauth.client_id to your Slack app's client ID, or remove oauth.client_secret. |
 | `server` | Must contain only letters, digits, _ and -. | Use a name such as "slack". |
-| `allowUntestedHost` | Must be true or false. | Set it to true only to run on an OpenCode version this plugin is not tested with. |
+| `allowUntestedHost` | Must be true or false. | Set it to true only to run on an OpenCode version outside the supported range. |
 
 ### Client secret
 

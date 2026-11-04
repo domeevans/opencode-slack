@@ -21,6 +21,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - On a release inside `>=2.2.3 <2.3.0` other than 2.2.3, 2.2.4 and 2.2.5, Slack still sets everything up, and status calls the version untested. The `OpenCode` row reads, for example, `2.2.5 (tested; supported range >=2.2.3 <2.3.0)`.
 - Status always shows the `Agents without default rules` row, with `none` when every agent is covered.
 - While Slack is connecting, the next step says to run `/slack-status` again (or press `r` in `/slack`) instead of "refresh".
+- The tools RPC, from the shared module: a permission refusal names the action whose check was refused; a call that finds the server reconnecting answers `CONNECTING` instead of `CONNECTION_FAILED`; `describe` refuses any input with `describe takes no input`, and an envelope that is not an object gets `the envelope must be an object, such as {"sessionID":"<session>","input":<the tool's input>}` (was `Expected an object`).
+- Without a Slack app client ID, the tools RPC's `NOT_REGISTERED` next step is now the one `/slack-status` gives for `CLIENT_ID_MISSING`: run `/connect`, choose Slack app and paste the client ID.
 - Status no longer shows OpenCode's text for a needed sign-in, which can hold an authorization URL. For a failed connection it shows OpenCode's reason on one line of at most 160 characters, with any URL cut before its query.
 
 ### Fixed

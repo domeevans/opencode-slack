@@ -121,7 +121,7 @@ export function parseOptions(input: unknown): ParsedOptions {
 
   const allowUntestedHost = raw.allowUntestedHost ?? false
   if (typeof allowUntestedHost !== "boolean") {
-    return fail("allowUntestedHost", "Must be true or false.", "Set it to true only to run on an OpenCode version this plugin is not tested with.")
+    return fail("allowUntestedHost", "Must be true or false.", "Set it to true only to run on an OpenCode version outside the supported range.")
   }
 
   return {

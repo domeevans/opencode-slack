@@ -271,6 +271,9 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         const from = host.toolCalls().length
         for (const envelope of [{ sessionID: sessions.build, input: { query: "q" }, extra: true }, { input: { query: "q" } }, { sessionID: sessions.build, input: "q" }])
           expect(await script("slack_search_public", envelope)).toMatchObject({ type: "rpc.invalid_input" })
+        const describing = await script("describe", { sessionID: sessions.build })
+        expect(describing).toMatchObject({ type: "rpc.invalid_input" })
+        expect(describing.message).toContain("describe takes no input")
         expect(since(from)).toEqual([])
       })
 

@@ -134,9 +134,13 @@ describe("the tools RPC in setup", () => {
     expect(host.executed).toEqual([])
   })
 
-  test("names the missing server when there is no Slack app client ID", async () => {
+  test("without a Slack app client ID, gives the same next step as /slack-status's CLIENT_ID_MISSING", async () => {
     const host = await setUp({ options: {}, tools: [] })
-    expect(await host.script("slack_search_public", "ses_build", { query: "q" })).toMatchObject({ error: "failed", data: { code: "NOT_REGISTERED", next: NEXT_STEPS.NOT_REGISTERED } })
+    const status = (await host.status()) as { code: string; nextStep: string }
+    expect(status.code).toBe("CLIENT_ID_MISSING")
+    const refused = await host.script("slack_search_public", "ses_build", { query: "q" })
+    expect(refused).toMatchObject({ error: "failed", data: { code: "NOT_REGISTERED", next: NEXT_STEPS.NOT_REGISTERED } })
+    expect(NEXT_STEPS.NOT_REGISTERED).toStartWith(status.nextStep.replace(/\.$/, ""))
   })
 
   test("is disposed with its hook by the plugin's cleanup", async () => {
