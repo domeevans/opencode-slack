@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- The `slack-search` skill, the README and `docs/scripting.md` taught search parameters that Slack's server does not have. Every search tool takes one required `query`: keywords or a question, narrowed with Slack's search modifiers such as `in:#channel`, `from:<@U…>`, `after:` and `before:`. A test now checks every parameter the skill and the docs name against Slack's live tool schemas.
+
 ## [0.0.2] - 2026-11-03
 
 ### Added
@@ -31,5 +37,5 @@ All notable changes to this project are documented here. The format follows [Kee
 - Default permissions: the known read tools run without asking. Private search, file reads, writes (messages, drafts, schedules, reactions, canvases, lists, new conversations and file uploads) and unknown tools ask. Your `permissions` rules and "Always allow" answers override them.
 - `/slack-status`, the TUI dialog **Slack: Status** (`/slack`) and the status RPC, sharing one status model: the state, an error code, the client and its source, the tools by class, the agents without the default rules, the host check and one next step.
 - A host check: on an OpenCode version outside `>=2.2.3 <2.3.0`, only the status surfaces are registered unless `allowUntestedHost` is `true`.
-- The `slack-search` skill: search with `keywords` and `natural_language_query`, read for context, cite permalinks, and treat Slack content as untrusted.
+- The `slack-search` skill: search public channels first, read for context, cite permalinks, and treat Slack content as untrusted.
 - A Slack app manifest, `docs/slack-app-manifest.json`.

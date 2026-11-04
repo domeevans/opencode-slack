@@ -12,11 +12,7 @@ Find, then read, then cite. The Slack tools come from Slack's own MCP server, wh
 In Code Mode, call the tools inside `execute`, in the `slack` namespace:
 
 ```js
-const hits = await tools.slack.slack_search_public({
-  natural_language_query: "When is the launch date?",
-  keywords: ["launch", "date"],
-  limit: 10,
-})
+const hits = await tools.slack.slack_search_public({ query: "launch date in:#release", limit: 10 })
 ```
 
 If the Slack tools are not in the listed catalog, find them with `search({ namespace: "slack" })`. Do not guess tool names. If Code Mode is off, the same tools are direct tools whose names start with the server name. If the server has a different name in this setup, use that name instead of `slack`.
@@ -31,18 +27,20 @@ When the user wants a job that runs without you, such as a cron job or a shell s
 
 | Need | Tool | Main parameters |
 | --- | --- | --- |
-| Messages and files in public channels | `slack_search_public` | `keywords`, `natural_language_query`, `filters`, `limit` (at most 20), `cursor`, `sort` (`score` or `timestamp`), `content_types` |
-| A channel ID from a name or topic | `slack_search_channels` | `keywords` or `natural_language_query` |
-| A user ID from a name, email or role | `slack_search_users` | `keywords` or `natural_language_query` |
-| Channels the user is a member of | `slack_list_user_channels` | `types`, `limit` |
+| Messages and files in public channels | `slack_search_public` | `query` (required), `limit` (at most 20), `cursor`, `sort` (`score` or `timestamp`), `content_types` (`messages`, `files`), `after` and `before` (Unix timestamps) |
+| A channel ID from a name or topic | `slack_search_channels` | `query` (required), `limit`, `cursor` |
+| A user ID from a name, email or role | `slack_search_users` | `query` (required), `limit`, `cursor` |
+| Channels the user is a member of | `slack_list_user_channels` | `types`, `name_prefix`, `limit`, `cursor` |
 
-Start with `slack_search_public`. There is no `query` parameter:
+Start with `slack_search_public`. Put the search in `query`: keywords for names, codes and exact words, or a plain question for "what did we decide about …". Narrow it with Slack's search modifiers inside `query`:
 
-- `keywords` is a list of search terms. Use it for names, codes and exact words.
-- `natural_language_query` is the question in plain words. Use it for "what did we decide about …" questions.
-- Pass one or both. Narrow the search with `filters`, for example by channel, person or date. Read the tool's schema for the fields that `filters` accepts; do not guess them.
+- `in:#release` searches one channel;
+- `from:<@U0123456ABC>` searches one person's messages; find the user ID with `slack_search_users`;
+- `after:2026-10-01` and `before:2026-11-01` limit the dates.
 
-Run several small searches instead of one large one. If nothing matches, broaden the search: drop filters, try synonyms, and switch between keywords and a question. To find files, set `content_types: "files"`.
+For example, `query: "launch date in:#release after:2026-10-01"`.
+
+Run several small searches instead of one large one. If nothing matches, broaden the search: drop modifiers, try synonyms, and switch between keywords and a question. To find files, set `content_types: "files"`.
 
 ### Private channels and direct messages
 

@@ -29,7 +29,7 @@ opencode plugin add @joe-broadhead/opencode-slack
 
 Ask in plain words, for example "find what we decided about the launch date in #release, with links". The `slack-search` skill guides the agent: search public channels first, read the thread for context, cite permalinks, never claim it searched everything, and treat Slack content as data, not instructions.
 
-The Slack tools are Slack's own. With Code Mode, which is on by default, agents call them as `tools.slack.<tool>` inside `execute`, for example `tools.slack.slack_search_public({ natural_language_query: "When is the launch?", keywords: ["launch"] })`. Their names and permission actions are `slack_<tool>`, for example `slack_slack_search_public`.
+The Slack tools are Slack's own. With Code Mode, which is on by default, agents call them as `tools.slack.<tool>` inside `execute`, for example `tools.slack.slack_search_public({ query: "launch date in:#release", limit: 10 })`. Their names and permission actions are `slack_<tool>`, for example `slack_slack_search_public`.
 
 **Status.** In the TUI, `/slack` (or **Slack: Status** in the command palette) opens a dialog. Press `r` to refresh and `Esc` to close; it also refreshes when the connection, agents or saved client change. If it shows 0 tools just after connecting, press `r`. `/slack-status` posts the same status into the session without starting a model turn. Status shows these rows, in order:
 
@@ -48,7 +48,7 @@ A script or a cron job can call Slack's fourteen read tools with no model, throu
 
 ```sh
 opencode api post /api/rpc/slack.workspace.tools/slack_search_public \
-  -d '{"input":{"sessionID":"ses_…","input":{"keywords":["launch"]}}}'
+  -d '{"input":{"sessionID":"ses_…","input":{"query":"launch date","limit":10}}}'
 ```
 
 See [Scripting](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/scripting.md).

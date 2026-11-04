@@ -59,7 +59,7 @@ The body is `{"input": {"sessionID": "<session>", "input": <the tool's input>}}`
 ```sh
 opencode api post /api/rpc/slack.workspace.tools/slack_search_public -d '{"input":{
   "sessionID":"ses_…",
-  "input":{"natural_language_query":"When is the launch date?","keywords":["launch"],"limit":10}
+  "input":{"query":"launch date in:#release","limit":10}
 }}'
 ```
 

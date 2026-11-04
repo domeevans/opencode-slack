@@ -7,7 +7,7 @@ import { defaultRules, type Rule } from "../../src/permissions.js"
 import type { Status } from "../../src/status.js"
 import { KNOWN_READS, TOOLS_RPC_ID } from "../../src/host/tools-rpc.js"
 import { classify } from "../../src/tools.js"
-import { FAKE_INPUT, FAKE_TOOLS, UPSTREAM_FAILURE } from "./fake-slack-mcp.js"
+import { fakeInput, FAKE_TOOLS, UPSTREAM_FAILURE } from "./fake-slack-mcp.js"
 import { CLIENT_ID, HOSTED_OAUTH, repositoryChanges, USER_SERVER, type Host, type Project } from "./harness.js"
 import type { Outcome } from "./probe/index.js"
 
@@ -161,6 +161,10 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
       const run = (session: string, method: string, input: unknown = {}, project: Project = "defaults") =>
         script(method, { sessionID: sessions[session] ?? session, input }, project)
       const since = (from: number) => host.toolCalls().slice(from)
+      // Inputs that Slack's schemas accept.
+      const CHANNEL = { channel_id: "C0TEST" }
+      const THREAD = { channel_id: "C0TEST", message_ts: "1730000000.000100" }
+      const FILE = { file_id: "F0TEST" }
 
       beforeAll(async () => {
         expect((await discovered("defaults")).state).toBe("connected")
@@ -184,7 +188,7 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         const { value } = await script("describe", {})
         expect(value.id).toBe(TOOLS_RPC_ID)
         expect(value.methods.map((method: { name: string }) => method.name)).toEqual([...KNOWN_READS])
-        for (const method of value.methods) expect({ ...method, description: undefined, output: undefined }).toEqual({ name: method.name, tool: `slack_${method.name}`, kind: "mcp", action: `slack_${method.name}`, available: true, input: FAKE_INPUT, description: undefined, output: undefined })
+        for (const method of value.methods) expect({ ...method, description: undefined, output: undefined }).toEqual({ name: method.name, tool: `slack_${method.name}`, kind: "mcp", action: `slack_${method.name}`, available: true, input: fakeInput(method.name), description: undefined, output: undefined })
         const from = host.toolCalls().length
         const excluded = FAKE_TOOLS.filter((tool) => ["write", "unknown"].includes(classify(tool)))
         expect(excluded.length).toBe(14)
@@ -216,7 +220,7 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         const from = host.toolCalls().length
         for (const method of ["slack_search_public_and_private", "slack_read_file"]) {
           const started = Date.now()
-          const result = await run("build", method, { query: "q" })
+          const result = await run("build", method, method === "slack_read_file" ? FILE : { query: "q" })
           expect(result).toMatchObject({ type: "failed", code: "PERMISSION_DENIED" })
           expect(result.message).toMatch(/cannot answer an approval prompt/)
           expect(Date.now() - started).toBeLessThan(5000)
@@ -229,11 +233,11 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
       test("applies the session's rules after the agent's: an allow rule opens the reads that ask", async () => {
         const from = host.toolCalls().length
         expect(await run("narrow", "slack_search_public", { query: "q" })).toMatchObject({ type: "failed", code: "PERMISSION_DENIED" })
-        expect((await run("narrow", "slack_read_channel", {})).value).toMatchObject({ output: { tool: "slack_read_channel" } })
+        expect((await run("narrow", "slack_read_channel", CHANNEL)).value).toMatchObject({ output: { tool: "slack_read_channel" } })
         expect((await run("allowed", "slack_search_public_and_private", { query: "q" })).value).toMatchObject({ output: { tool: "slack_search_public_and_private" } })
-        expect((await run("allowed", "slack_read_file", {})).value).toMatchObject({ output: { tool: "slack_read_file" } })
-        expect((await run("reopen", "slack_read_thread", {})).value).toMatchObject({ output: { tool: "slack_read_thread" } })
-        expect(await run("reopen", "slack_read_channel", {})).toMatchObject({ type: "failed", code: "PERMISSION_DENIED" })
+        expect((await run("allowed", "slack_read_file", FILE)).value).toMatchObject({ output: { tool: "slack_read_file" } })
+        expect((await run("reopen", "slack_read_thread", THREAD)).value).toMatchObject({ output: { tool: "slack_read_thread" } })
+        expect(await run("reopen", "slack_read_channel", CHANNEL)).toMatchObject({ type: "failed", code: "PERMISSION_DENIED" })
         expect(since(from)).toEqual(["slack_read_channel", "slack_search_public_and_private", "slack_read_file", "slack_read_thread"])
       })
 
