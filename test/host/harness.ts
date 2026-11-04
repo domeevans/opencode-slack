@@ -235,14 +235,17 @@ export async function startEmbedded(): Promise<Host> {
 
 const binaries = new Map<string, string>()
 const installs: string[] = []
-process.once("exit", () => {
-  for (const dir of installs) rmSync(dir, { recursive: true, force: true })
-})
+
+/** Removes the stock releases stockBinary installed. Bun's test runner emits no `exit` event, so suites call this in afterAll. */
+export function removeInstalls(): void {
+  for (const dir of installs.splice(0)) rmSync(dir, { recursive: true, force: true })
+  binaries.clear()
+}
 
 /**
  * The stock CLI for `version`. Set OPENCODE_BIN_2_2_3 (and so on) to a binary you already have; otherwise the
- * unmodified npm release is installed into a temp directory with scripts disabled, once per version and process, and
- * removed when the process exits.
+ * unmodified npm release is installed into a temp directory with scripts disabled, once per version and run, and
+ * removed by removeInstalls().
  */
 function stockBinary(version: string): string {
   const given = process.env[`OPENCODE_BIN_${version.replaceAll(".", "_")}`]

@@ -10,7 +10,7 @@ import { gunzipSync } from "node:zlib"
 import { KNOWN_READS, TOOLS_RPC_ID } from "../../src/host/tools-rpc.js"
 import { defaultRules } from "../../src/permissions.js"
 import type { Status } from "../../src/status.js"
-import { CLIENT_ID, HOST_VERSIONS, isolatedEnv, REPO, startBinary, tempDirectory } from "../host/harness.js"
+import { CLIENT_ID, HOST_VERSIONS, isolatedEnv, removeInstalls, REPO, startBinary, tempDirectory } from "../host/harness.js"
 
 setDefaultTimeout(300_000)
 
@@ -25,7 +25,10 @@ interface Manifest {
 const pkg = JSON.parse(readFileSync(join(REPO, "package.json"), "utf8")) as Manifest
 // Outside the repository, so module resolution cannot fall back to the repository's own node_modules.
 const work = tempDirectory("slack-pack-", true)
-afterAll(() => rmSync(work, { recursive: true, force: true }), { timeout: 120_000 })
+afterAll(() => {
+  rmSync(work, { recursive: true, force: true })
+  removeInstalls()
+}, { timeout: 120_000 })
 
 const MAX_ENTRIES = 50
 const MAX_UNPACKED_BYTES = 150 * 1024
