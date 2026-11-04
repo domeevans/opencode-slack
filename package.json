@@ -245,7 +245,8 @@
         "id": "slack",
         "label": "Slack",
         "server": "slack",
-        "after": "app"
+        "after": "app",
+        "relay": {}
       }
     ],
     "contributes": {
