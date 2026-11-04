@@ -1,5 +1,7 @@
 // Starts OpenCode hosts for the host test: the embedded public `@opencode/sdk`, or a stock `opencode serve` binary.
-// Each host gets its own temp root holding HOME, OpenCode's test home, the XDG directories, TMPDIR, its database
+// Each host gets its own temp root under the system's /tmp, never under TMPDIR or HOME, where OpenCode's upward search
+// would find a `.opencode` folder of the person running the tests; the root is a git repository, which ends that
+// search. It holds HOME, OpenCode's test home, the XDG directories, TMPDIR, its database
 // and one project directory per case. The embedded host also moves the process working directory into that root,
 // because the SDK opens a location at it. The Slack server is kept offline by the probe plugin. Outbound HTTP goes
 // to a dead proxy, and stock binaries also disable model fetch, autoupdate and free models. A stock load asserts
@@ -8,10 +10,11 @@ import { spawn, spawnSync } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { createServer } from "node:net"
-import { arch, platform, tmpdir } from "node:os"
+import { arch, platform } from "node:os"
 import { join, sep } from "node:path"
 import { fileURLToPath } from "node:url"
 import { OpenCode as Remote, type OpenCodeClient } from "@opencode/client"
+import { TESTED_HOSTS } from "../../src/defaults.js"
 import { defaultRules, type Rule } from "../../src/permissions.js"
 
 export const REPO = realpathSync(fileURLToPath(new URL("../..", import.meta.url)))
@@ -19,8 +22,24 @@ const PROBE = join(REPO, "test", "host", "probe")
 const FAKE_SERVER = join(REPO, "test", "host", "fake-slack-mcp.ts")
 export const CLIENT_ID = "TEST_CLIENT_ID"
 
-/** The stock OpenCode releases the plugin is tested on. */
-export const HOST_VERSIONS = ["2.2.3", "2.2.4"] as const
+/** The stock OpenCode releases the plugin is tested on: the one list in src/defaults.ts. */
+export const HOST_VERSIONS: readonly string[] = TESTED_HOSTS
+
+/** The system temp directory, resolved (/private/tmp on macOS). Not TMPDIR, which may sit under HOME. */
+export const TEMP = realpathSync("/tmp")
+
+/**
+ * A new temp directory under TEMP. With `repository`, it is also a git repository, so OpenCode's search for
+ * `.opencode` folders and project config stops there instead of walking up into the system's folders.
+ */
+export function tempDirectory(prefix: string, repository = false): string {
+  const path = realpathSync(mkdtempSync(join(TEMP, prefix)))
+  if (repository) {
+    const result = spawnSync("git", ["init", "--quiet", path], { encoding: "utf8" })
+    if (result.status !== 0) throw new Error(`git init ${path} failed: ${result.stderr}`)
+  }
+  return path
+}
 
 type Client = Pick<OpenCodeClient, "agent" | "command" | "integration" | "mcp" | "permission" | "plugin" | "rpc" | "session" | "skill">
 
@@ -132,7 +151,7 @@ export function isolatedEnv(root: string): Readonly<Record<string, string>> {
 }
 
 function makeRoot(label: string, plugin: string): Root {
-  const path = realpathSync(mkdtempSync(join(tmpdir(), `slack-host-${label}-`)))
+  const path = tempDirectory(`slack-host-${label}-`, true)
   const env = isolatedEnv(path)
   for (const dir of Object.values(env)) mkdirSync(dir, { recursive: true })
   // A location the host opens at its working directory still must not probe loopback providers.
@@ -214,23 +233,31 @@ export async function startEmbedded(): Promise<Host> {
   }
 }
 
+const binaries = new Map<string, string>()
+const installs: string[] = []
+process.once("exit", () => {
+  for (const dir of installs) rmSync(dir, { recursive: true, force: true })
+})
+
 /**
  * The stock CLI for `version`. Set OPENCODE_BIN_2_2_3 (and so on) to a binary you already have; otherwise the
- * unmodified npm release is installed into a temp directory with scripts disabled.
+ * unmodified npm release is installed into a temp directory with scripts disabled, once per version and process, and
+ * removed when the process exits.
  */
-function stockBinary(version: string): { readonly path: string; remove(): void } {
+function stockBinary(version: string): string {
   const given = process.env[`OPENCODE_BIN_${version.replaceAll(".", "_")}`]
-  if (given !== undefined && given !== "") return { path: given, remove: () => {} }
+  if (given !== undefined && given !== "") return given
+  const known = binaries.get(version)
+  if (known !== undefined) return known
   // Its own package.json, and npm's cwd set to it: npm walks up from a folder that has none.
-  const dir = mkdtempSync(join(tmpdir(), `slack-host-opencode-${version}-`))
+  const dir = tempDirectory(`slack-host-opencode-${version}-`)
+  installs.push(dir)
   writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "slack-host-opencode", private: true }))
   const result = spawnSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", `@opencode/cli@${version}`], { cwd: dir, encoding: "utf8" })
   const path = join(dir, "node_modules", "@opencode", `cli-${platform()}-${arch()}`, "bin", "opencode")
-  if (result.status !== 0 || !existsSync(path)) {
-    rmSync(dir, { recursive: true, force: true })
-    throw new Error(`Could not install @opencode/cli@${version} for ${platform()}-${arch()}:\n${result.stderr}`)
-  }
-  return { path, remove: () => rmSync(dir, { recursive: true, force: true }) }
+  if (result.status !== 0 || !existsSync(path)) throw new Error(`Could not install @opencode/cli@${version} for ${platform()}-${arch()}:\n${result.stderr}`)
+  binaries.set(version, path)
+  return path
 }
 
 async function freePort(): Promise<number> {
@@ -252,18 +279,15 @@ export async function startBinary(version: string, plugin = REPO): Promise<Host>
   const password = randomUUID()
   const port = await freePort()
   const env = { ...root.env, ...OFFLINE, PATH: "/usr/bin:/bin", OPENCODE_PASSWORD: password }
-  const stop = () => {
-    root.remove()
-    binary.remove()
-  }
+  const stop = () => root.remove()
 
   // Prints "opencode v2.2.3".
-  const reported = spawnSync(binary.path, ["--version"], { cwd: root.path, env, encoding: "utf8" })
+  const reported = spawnSync(binary, ["--version"], { cwd: root.path, env, encoding: "utf8" })
   if (reported.stdout.trim() !== `opencode v${version}`) {
     stop()
-    throw new Error(`${binary.path} reports ${JSON.stringify(reported.stdout.trim())}, expected ${version}`)
+    throw new Error(`${binary} reports ${JSON.stringify(reported.stdout.trim())}, expected ${version}`)
   }
-  const paths = spawnSync(binary.path, ["debug", "paths"], { cwd: root.path, env, encoding: "utf8" })
+  const paths = spawnSync(binary, ["debug", "paths"], { cwd: root.path, env, encoding: "utf8" })
   const entries = paths.stdout.trim().split("\n").flatMap((line) => {
     const match = /^(\S+)\s+(\S.*)$/.exec(line.trim())
     const name = match?.[1]
@@ -277,7 +301,7 @@ export async function startBinary(version: string, plugin = REPO): Promise<Host>
   }
 
   let output = ""
-  const server = spawn(binary.path, ["serve", "--hostname", "127.0.0.1", "--port", String(port)], { cwd: root.path, env, stdio: ["ignore", "pipe", "pipe"] })
+  const server = spawn(binary, ["serve", "--hostname", "127.0.0.1", "--port", String(port)], { cwd: root.path, env, stdio: ["ignore", "pipe", "pipe"] })
   server.stdout.on("data", (chunk: Buffer) => void (output += chunk.toString()))
   server.stderr.on("data", (chunk: Buffer) => void (output += chunk.toString()))
   const exited = new Promise<void>((resolve) => server.once("exit", () => resolve()))

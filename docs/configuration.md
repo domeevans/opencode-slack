@@ -35,7 +35,7 @@ Every option is optional. Pass options in the object form of a `plugins` entry:
 | `oauth.scopes` | `["channels:history", "channels:read", "search:read.public", "users:read"]` | A non-empty list of unique Slack user scopes, each without spaces. Your list replaces the default list. See [Scopes](#scopes). |
 | `oauth.client_secret` | Not set (public client with PKCE) | A non-empty string, and only together with `oauth.client_id`. Set it only for a Slack app that does not use PKCE, and only through `{env:NAME}`. See [Client secret](#client-secret). |
 | `server` | `slack` | Letters, digits, `_` and `-` only. This is the MCP server name. It is also the prefix of every Slack tool name and permission action (`<server>_<tool>`), the Code Mode namespace (`tools.<server>`), and part of the `/connect` entry ID (`<server>-app`). |
-| `allowUntestedHost` | `false` | `true` or `false`. If it is `true`, the plugin runs on an OpenCode version outside its tested range, and status keeps warning. See [Host check](#host-check). |
+| `allowUntestedHost` | `false` | `true` or `false`. If it is `true`, the plugin runs on an OpenCode version outside its supported range, and status keeps warning. See [Host check](#host-check). |
 
 Unknown keys are rejected, at the top level and inside `oauth`.
 
@@ -113,9 +113,10 @@ Status shows the client mode as `confidential, secret set` and never shows the v
 
 ### Host check
 
-When it loads, the plugin compares the OpenCode version with its tested range, `>=2.2.3 <2.3.0`. `package.json` declares the same range as `opencode.host`. Status shows the version and the tested range in its `OpenCode` row.
+When it loads, the plugin compares the OpenCode version with its supported range, `>=2.2.3 <2.3.0`, which `package.json` declares as `opencode.host`. Every check runs on OpenCode 2.2.3, 2.2.4 and 2.2.5, the tested releases. Status shows the version, whether it is tested and the supported range in its `OpenCode` row, for example `2.2.5 (tested; supported range >=2.2.3 <2.3.0)`.
 
-- **Inside the range:** the plugin sets everything up.
+- **A tested release:** the plugin sets everything up.
+- **Another release inside the range, such as 2.2.6:** the plugin sets everything up too. Status marks the version `untested` (the RPC's `host.tested` is `false`), and its state is the connection's.
 - **Outside the range, including prereleases and development builds:** the plugin registers only `/slack-status`, the TUI view and the status RPC. They show the connection `host untested` and the code `HOST_UNTESTED`, with the next step `Use OpenCode >=2.2.3 <2.3.0, or set "allowUntestedHost": true in this plugin's options to run anyway.` If an option is also invalid, they show `OPTIONS_INVALID` first.
 - **Outside the range with `"allowUntestedHost": true`:** the plugin sets everything up, and status marks the version as untested.
 
@@ -163,7 +164,7 @@ The plugin always sends `redirect_uri`. Without it, OpenCode would use `http://1
 
 **In `/connect`:** OpenCode lists the server's own sign-in, which the plugin names **Slack**. Without `oauth.client_id` in the options, the plugin also adds **Slack app** (ID `slack-app`) for the client ID. With it, there is no **Slack app** entry, and no status line or next step mentions one: nobody is asked to paste a client ID.
 
-**Name collision.** If your config already defines an MCP server with the same name, for example `mcp.servers.slack`, the plugin leaves it alone. Status then shows the state `not_registered` with the code `SERVER_NAME_IN_USE`. Remove your entry, or set `server` to another name.
+**Name collision.** If your config already defines an MCP server with the same name, for example `mcp.servers.slack`, the plugin leaves it alone. Status then shows the state `conflict` with the code `SERVER_NAME_IN_USE`. Remove your entry, or set `server` to another name.
 
 The plugin defines no tools of its own. Besides the server and the `/connect` entries, it registers the default permission rules, the `/slack-status` command, the status RPC, the TUI `/slack` dialog and the `slack-search` skill.
 
@@ -305,27 +306,29 @@ Approving a write tool in OpenCode does not grant its Slack scope. Without the s
 
 ## Status and RPC
 
-`/slack-status`, the TUI `/slack` dialog and the RPC method `status` (RPC ID `slack.workspace`) share one status model. It holds no client secret and no token:
+`/slack-status`, the TUI `/slack` dialog and the RPC method `status` (RPC ID `slack.workspace`) share one status model. It holds no client secret, no token and no URL query. `version`, `host`, `state`, `unguardedAgents` and `nextStep` are the fields every plugin of this family shares, with the same names and meanings:
 
 | Field | Content |
 | --- | --- |
-| `state` | `connected`, `not_signed_in`, `connecting`, `disabled`, `failed`, `not_registered`, `no_client_id`, `config_invalid` or `host_untested`. The text surfaces show it as `connected`, `sign-in required`, `connecting`, `disabled`, `failed` (also for a server OpenCode did not load), `conflict` (a server name in use), `not configured` (no client ID or invalid options) or `host untested`. |
+| `version` | The plugin's version |
+| `state` | `connected`, `sign_in_required`, `connecting`, `disabled`, `failed`, `not_configured`, `conflict` or `host_untested`. The text surfaces show the same states as `connected`, `sign-in required`, `connecting`, `disabled`, `failed` (also for a server OpenCode did not load), `not configured` (no client ID or invalid options), `conflict` (a server name in use) and `host untested`. |
 | `code` | One of the codes in [Errors](#errors); absent when there is no problem to report |
-| `message`, `detail` | What happened. `detail` carries OpenCode's error text for a failed or signed-out connection. |
-| `next` | Exactly one next step |
+| `message` | What happened |
+| `detail` | For a failed connection only: OpenCode's reason, on one line of at most 160 characters, with any URL cut before its query. The text for a needed sign-in can hold an authorization URL, so it is never shown. |
+| `nextStep` | Exactly one next step: the `Next step` row, `Nothing to do.` when nothing is needed |
 | `server` | `name` and `url` |
 | `client` | `id`, `mode` (`public_pkce` or `confidential`) and `source` (`options` or `connect`), when there is a client |
 | `callback` | The redirect URI to register in the Slack app, when the plugin is set up |
 | `callbackPort` | OpenCode's local listener port, for an `https:` callback |
 | `scopes` | The requested scopes, when the plugin is set up |
 | `asksBefore` | What asks by default |
-| `tools` | Counts of `read`, `private`, `file` and `write` tools on the server, and the names of `unknown` tools |
-| `unguardedAgents` | Agents that would run an unknown Slack tool without asking |
-| `host` | `version`, tested `range` and `tested` |
+| `tools` | Counts of `read`, `private`, `file`, `write` and `unknown` tools on the server, and `unknownNames`: at most 20 of the unknown tools' names, only those made of lowercase letters, digits and `_` |
+| `unguardedAgents` | Agents that would run an unknown Slack tool without asking; empty when there are none. An agent whose own rules already ask or deny for every Slack tool is not listed. |
+| `host` | `version` (`null` if OpenCode reports none), `range` (the supported range) and `tested` (true only for 2.2.3, 2.2.4 and 2.2.5) |
 
 Scripts have a second RPC, `slack.workspace.tools`, which calls Slack's read tools with no model. It has its own error codes; see [Scripting](scripting.md).
 
-The text surfaces show the rows `Connection`, `Account`, `Access`, `Server`, `Client`, `Callback`, `Scopes`, `Tools`, `Agents without default rules`, `OpenCode` and `Next step`, in that order. The RPC has one error, `unavailable`. OpenCode does not record which Slack account signed in, and the plugin never reads tokens, so status has no account field. Slack shows the workspace and account on its sign-in page.
+The text surfaces show the rows `Connection`, `Account`, `Access`, `Server`, `Client`, `Callback`, `Scopes`, `Tools`, `Agents without default rules`, `OpenCode` and `Next step`, in that order. `Client`, `Callback` and `Scopes` appear when they apply; every other row is always there, with `none` when no agent lacks the default rules. The RPC has one error, `unavailable`. OpenCode does not record which Slack account signed in, and the plugin never reads tokens, so status has no account field. Slack shows the workspace and account on its sign-in page.
 
 ## Errors
 
@@ -338,6 +341,7 @@ Every error the plugin raises reads `CODE: What happened. Next step: What to do.
 | `CLIENT_ID_INVALID` | not configured | Run /connect and choose Slack app, then paste your Slack app's client ID. |
 | `AUTH_REQUIRED` | sign-in required | Run /connect and choose Slack, then press o or Enter to open the sign-in page (in a terminal, opencode mcp auth slack opens the browser automatically). |
 | `CONNECTION_FAILED` | failed | Fix the error shown, then reconnect slack in /mcps. |
+| none: connecting | connecting | Wait a few seconds, then run /slack-status again (or press r in /slack). |
 | `SERVER_DISABLED` | disabled | Enable slack in /mcps. |
 | `SERVER_NAME_IN_USE` | conflict | Remove mcp.servers.slack from your OpenCode config, or set this plugin's "server" option to another name. |
 | `OPTIONS_INVALID` | not configured | See [Validation errors](#validation-errors). |

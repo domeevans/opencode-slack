@@ -1,8 +1,9 @@
 // An offline stand-in for Slack's MCP server over stdio: every tool Slack lists, with Slack's own input schemas
-// (slack-catalog.ts), plus one the plugin does not know. It answers the handshake and tool listing, and a `tools/call` with the tool's name and
-// arguments as structured content and text, or, for a `query` that starts with "fail", with an upstream error
-// (`isError`) whose first line holds a signed URL. With a file path as its argument, it appends each called tool's
-// name to that file, one per line, so a test can tell which tools OpenCode called.
+// (slack-catalog.ts), plus one the plugin does not know. It answers the handshake and tool listing. A `tools/call`
+// gets the tool's name and arguments as structured content and text; for the `query` "text only", text alone; for a
+// `query` that starts with "fail", an upstream error (`isError`) whose first line holds a signed URL. With a file
+// path as its argument, it appends each called tool's name to that file, one per line, so a test can tell which
+// tools OpenCode called.
 import { appendFileSync } from "node:fs"
 import { createInterface } from "node:readline"
 import { SLACK_SCHEMAS } from "./slack-catalog.js"
@@ -42,6 +43,7 @@ if (import.meta.main) {
         const args = message.params?.arguments ?? {}
         if (log !== undefined) appendFileSync(log, `${name}\n`)
         if (String(args.query ?? "").startsWith("fail")) return reply({ content: [{ type: "text", text: UPSTREAM_FAILURE }], isError: true })
+        if (args.query === "text only") return reply({ content: [{ type: "text", text: `${name}: text only` }] })
         return reply({ content: [{ type: "text", text: `${name}: ${JSON.stringify(args)}` }], structuredContent: { tool: name, arguments: args } })
       }
       case "ping":

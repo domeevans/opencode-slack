@@ -4,19 +4,19 @@
 // OpenCode 2.2.3 ships, both entry points import under Bun.
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test"
 import { spawnSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { basename, join, relative, sep } from "node:path"
 import { gunzipSync } from "node:zlib"
 import { KNOWN_READS, TOOLS_RPC_ID } from "../../src/host/tools-rpc.js"
 import { defaultRules } from "../../src/permissions.js"
 import type { Status } from "../../src/status.js"
-import { CLIENT_ID, HOST_VERSIONS, isolatedEnv, REPO, startBinary } from "../host/harness.js"
+import { CLIENT_ID, HOST_VERSIONS, isolatedEnv, REPO, startBinary, tempDirectory } from "../host/harness.js"
 
 setDefaultTimeout(300_000)
 
 interface Manifest {
   readonly name: string
+  readonly version: string
   readonly files: readonly string[]
   readonly exports: Readonly<Record<string, string>>
   readonly devDependencies: Readonly<Record<string, string>>
@@ -24,7 +24,7 @@ interface Manifest {
 
 const pkg = JSON.parse(readFileSync(join(REPO, "package.json"), "utf8")) as Manifest
 // Outside the repository, so module resolution cannot fall back to the repository's own node_modules.
-const work = realpathSync(mkdtempSync(join(tmpdir(), "slack-pack-")))
+const work = tempDirectory("slack-pack-", true)
 afterAll(() => rmSync(work, { recursive: true, force: true }), { timeout: 120_000 })
 
 const MAX_ENTRIES = 50
@@ -183,7 +183,7 @@ describe.each(HOST_VERSIONS)("the installed package on stock opencode %s", (vers
     try {
       const location = host.location("defaults")
       const status = (await host.client.rpc.call({ rpcID: "slack.workspace", method: "status", location, input: {} })).output as Status
-      expect(status).toMatchObject({ host: { version, tested: true }, client: { id: CLIENT_ID } })
+      expect(status).toMatchObject({ version: pkg.version, host: { version, range: ">=2.2.3 <2.3.0", tested: true }, client: { id: CLIENT_ID } })
       const plugin = (await host.client.plugin.list({ location })).data.find((item) => item.id === "slack.workspace")
       // exports has no ./rpc, so OpenCode lists no RPC part; the server part registers the status RPC above.
       expect(plugin).toMatchObject({ state: { status: "active" }, features: { server: true, tui: true }, source: { path: installed } })

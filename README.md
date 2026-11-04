@@ -42,8 +42,8 @@ The Slack tools are Slack's own. With Code Mode, which is on by default, agents 
 - `Access`: what runs without asking, what asks first, and how to allow it;
 - `Server`, `Client`, `Callback` and `Scopes`: the Slack server, the client ID and where it came from, the callback URL to register, and the requested scopes;
 - `Tools`: the Slack tools found, counted by class, with any unknown tools named;
-- `Agents without default rules`: agents that run Slack tools without asking, with the rules to paste (see [Agents without the default rules](#agents-without-the-default-rules));
-- `OpenCode`: the version and the tested range;
+- `Agents without default rules`: agents that run Slack tools without asking, with the rules to paste (see [Agents without the default rules](#agents-without-the-default-rules)), or `none`;
+- `OpenCode`: the version, whether it is tested (2.2.3, 2.2.4 and 2.2.5), and the supported range;
 - `Next step`: exactly one, or `Nothing to do.`
 
 ### Scripts
@@ -170,13 +170,13 @@ Run `/slack-status` (or `/slack` in the TUI) first. Its `Connection` row shows a
 | `not configured` | `CLIENT_ID_MISSING` | No Slack app client ID is set, so the Slack server is not added. | Run `/connect` and choose **Slack app**, then paste your Slack app's client ID. |
 | `not configured` | `CLIENT_ID_INVALID` | The client ID saved in the `/connect` **Slack app** entry is empty or has spaces. | Run `/connect` and choose **Slack app**, then paste the client ID again. |
 | `sign-in required` | `AUTH_REQUIRED` | Nobody has signed in yet, or the sign-in expired. | Run `/connect` and choose **Slack**, then press `o` or Enter to open the sign-in page. `opencode mcp auth slack` opens the browser automatically. |
-| `connecting` | none | OpenCode is connecting to Slack. | Wait a few seconds, then refresh. |
+| `connecting` | none | OpenCode is connecting to Slack. | Wait a few seconds, then run `/slack-status` again (or press `r` in `/slack`). |
 | `disabled` | `SERVER_DISABLED` | The server is turned off. | Turn on `slack` in `/mcps`. |
-| `failed` | `CONNECTION_FAILED` | The connection failed. Status includes OpenCode's error text. | Fix the error shown, then reconnect `slack` in `/mcps`. |
+| `failed` | `CONNECTION_FAILED` | The connection failed. Status shows OpenCode's reason, shortened to one line. | Fix the error shown, then reconnect `slack` in `/mcps`. |
 | `conflict` | `SERVER_NAME_IN_USE` | Another MCP server already uses the name `slack`. | Remove `mcp.servers.slack` from your config, or set the `server` option to another name. |
 | `failed` | none | OpenCode has not loaded the server. | Run `opencode reload`, then check again. |
 | `not configured` | `OPTIONS_INVALID` | An option is invalid. Status names the field. | Follow the next step. |
-| `host untested` | `HOST_UNTESTED` | This OpenCode version is outside `>=2.2.3 <2.3.0`, so Slack is not set up. | Use OpenCode `>=2.2.3 <2.3.0`, or set `"allowUntestedHost": true` in the plugin's options. |
+| `host untested` | `HOST_UNTESTED` | This OpenCode version is outside the supported range `>=2.2.3 <2.3.0`, so Slack is not set up. A release inside the range that is not 2.2.3, 2.2.4 or 2.2.5 runs normally; the `OpenCode` row calls it untested. | Use OpenCode `>=2.2.3 <2.3.0`, or set `"allowUntestedHost": true` in the plugin's options. |
 | `connected` | none | Ready. The next step reads `Nothing to do.` | If status names agents without default rules, put the default rules first in their own permissions (see above). |
 
 If status itself cannot be read, `/slack-status` says `STATUS_UNAVAILABLE`; run it again in a moment.

@@ -4,11 +4,31 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- OpenCode 2.2.5 is a tested release, next to 2.2.3 and 2.2.4.
+- Code Mode's catalog now describes the `slack` namespace: what the tools do, what asks first, and that Slack content is untrusted.
+- The status RPC has `version`, the plugin's version.
+- The `jelly` section declares the tools RPC's 14 methods in `jelly.rpc`, each read-only and under the permission of the tool it runs.
+
+### Changed
+
+- The status RPC (`slack.workspace` `status`) uses the field names every plugin of this family shares. Scripts that read it need these changes:
+  - `next` is now `nextStep`;
+  - `state` uses the shared states: `not_signed_in` is now `sign_in_required`; `no_client_id` and `config_invalid` are now `not_configured`; `not_registered` is now `conflict` for a server name in use (`SERVER_NAME_IN_USE`) and `failed` for a server OpenCode did not load;
+  - `tools.unknown` is now the number of unknown tools, and their names are in `tools.unknownNames`: at most 20, and only plain tool names;
+  - `host.tested` is true only for 2.2.3, 2.2.4 and 2.2.5, and `host.range` is the supported range; `host.version` is `null` when OpenCode reports no version.
+- On a release inside `>=2.2.3 <2.3.0` other than 2.2.3, 2.2.4 and 2.2.5, Slack still sets everything up, and status calls the version untested. The `OpenCode` row reads, for example, `2.2.5 (tested; supported range >=2.2.3 <2.3.0)`.
+- Status always shows the `Agents without default rules` row, with `none` when every agent is covered.
+- While Slack is connecting, the next step says to run `/slack-status` again (or press `r` in `/slack`) instead of "refresh".
+- Status no longer shows OpenCode's text for a needed sign-in, which can hold an authorization URL. For a failed connection it shows OpenCode's reason on one line of at most 160 characters, with any URL cut before its query.
+
 ### Fixed
 
 - The `slack-search` skill, the README and `docs/scripting.md` taught search parameters that Slack's server does not have. Every search tool takes one required `query`: keywords or a question, narrowed with Slack's search modifiers such as `in:#channel`, `from:<@U…>`, `after:` and `before:`. A test now checks every parameter the skill and the docs name against Slack's live tool schemas.
 - The README's Uninstall steps failed: once the plugin was removed, `opencode mcp logout slack` answered "MCP server not found", and the Slack sign-in and the saved client ID stayed in OpenCode's credential store. Uninstall now signs out first, checks with `opencode auth list`, then removes the plugin.
 - The README now says what to do after `opencode plugin add` (run `opencode reload`, then `/slack-status`) and how to update the plugin.
+- `docs/scripting.md` said `opencode api` runs in the directory you call it from. It runs in the OpenCode service's default location, your home directory; the doc now says how to target a project. It also says that `opencode api` exits with status 1 for an RPC error, and that a result with only text has that text as its `output`.
 
 ## [0.0.2] - 2026-11-03
 

@@ -6,4 +6,7 @@ export const DEFAULT_SCOPES: readonly string[] = ["channels:history", "channels:
 export const DEFAULT_SERVER = "slack"
 export const APP_MANIFEST_URL = "https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/slack-app-manifest.json"
 export const SLACK_MCP_URL = "https://mcp.slack.com/mcp"
-export const TESTED_HOST_RANGE = ">=2.2.3 <2.3.0"
+/** The OpenCode versions the plugin sets itself up on, as `opencode.host` in package.json states. */
+export const SUPPORTED_HOST_RANGE = ">=2.2.3 <2.3.0"
+/** The OpenCode releases every check runs on. Status calls only these "tested"; the host tests and CI use this list. */
+export const TESTED_HOSTS: readonly string[] = ["2.2.3", "2.2.4", "2.2.5"]

@@ -21,7 +21,7 @@ const NO_TOOLS_YET = "OpenCode lists Slack's tools just after it connects: press
 /** The status rows, with a hint on the tools row while a connected server lists no tools yet. */
 function dialogRows(status: Status) {
   const { read, private: search, file, write, unknown } = status.tools
-  const empty = status.state === "connected" && read + search + file + write + unknown.length === 0
+  const empty = status.state === "connected" && read + search + file + write + unknown === 0
   return statusRows(status).map((row) => (empty && row.label === "Tools" ? { ...row, value: `${row.value}. ${NO_TOOLS_YET}` } : row))
 }
 
