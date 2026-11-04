@@ -213,11 +213,16 @@ Some agents are created after the plugin inserts its rules, so they get none:
 
 These agents run Slack writes and unknown Slack tools without asking. `/slack-status` and the `/slack` dialog list them in the `Agents without default rules` row. Built-in agents are covered, including when your config only adjusts one, such as `agents.build`.
 
-For an agent named `reviewer`, a connected status has this `Agents without default rules` row and next step. The rule list is shortened here; status prints the whole block from [The inserted rules](#the-inserted-rules), with your `server` name as the prefix:
+For an agent named `reviewer`, a connected status has this `Agents without default rules` row and next step. The rule list is shortened here; status prints the whole block from [The inserted rules](#the-inserted-rules). The status RPC carries the names in `unguardedAgents` and the same next step:
 
 ```text
-Agents without default rules: These agents run Slack writes and unknown tools without asking: reviewer. In your OpenCode config, put these rules first in each agent's own "permissions" list (agents.<name>.permissions): [{ "action": "slack_*", "resource": "*", "effect": "ask" }, { "action": "slack_slack_search_public", "resource": "*", "effect": "allow" }, …]. Follow them with your top-level rules for slack_ actions, so yours keep winning. Do not add them to the top-level "permissions": there they would loosen stricter agents such as explore.
-Next step: Put the default Slack rules shown under "Agents without default rules" first in each of these agents' own permissions (agents.<name>.permissions), so they ask before Slack writes: reviewer.
+Agents without default rules: reviewer
+[
+  { "action": "slack_*", "resource": "*", "effect": "ask" },
+  { "action": "slack_slack_search_public", "resource": "*", "effect": "allow" },
+  …
+]
+Next step: Put the default rules shown by /slack-status first in each listed agent's own permissions, in opencode.json or the agent's Markdown file, followed by your top-level rules for Slack tools.
 ```
 
 **Fix:** add the block above to **that agent's own** `permissions`. Then repeat, after the block, any rules you already have for Slack tools in the top-level `permissions`, so they keep winning for that agent:

@@ -219,6 +219,21 @@ describe("the dialog", () => {
     expect(lines.filter((line) => line.startsWith("Callback "))).toEqual(value.callback === undefined ? [] : ["Callback http://localhost:8765/callback (register exactly this URL in the app's Redirect URLs)"])
   })
 
+  test("an unguarded agent: the row shows its name, then the block to paste, one rule per line; the next step names /slack-status", async () => {
+    const fake = fakeTui()
+    await activate(fake)
+    const frame = await open(fake)
+    const value = status({ agents: [{ id: "custom", permissions: [{ action: "*", resource: "*", effect: "allow" }] }] })
+    fake.calls[0]!.resolve(value)
+    const lines = (await frame()).split("\n").map((line) => line.trimEnd())
+    const row = lines.findIndex((line) => line.startsWith("Agents without default rules "))
+    expect(lines[row]).toBe("Agents without default rules custom")
+    expect(lines[row + 1]?.trim()).toBe("[")
+    expect(lines[row + 2]?.trim()).toBe('{ "action": "slack_*", "resource": "*", "effect": "ask" },')
+    expect(lines.at(-2)).toBe(`Next step ${value.nextStep}`)
+    expect(value.nextStep).toContain("/slack-status")
+  })
+
   test("r refreshes and shows the new status", async () => {
     const fake = fakeTui()
     await activate(fake)

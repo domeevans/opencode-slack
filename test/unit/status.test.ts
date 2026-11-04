@@ -35,6 +35,7 @@ function input(overrides: Partial<StatusInput> = {}): StatusInput {
 
 const SIGN_IN = "Run /connect and choose Slack, then press o or Enter to open the sign-in page (in a terminal, opencode mcp auth slack opens the browser automatically)."
 const NO_CLIENT_NEXT = "Run /connect and choose Slack app, then paste your Slack app's client ID."
+const AGENT_FIX = "Put the default rules shown by /slack-status first in each listed agent's own permissions, in opencode.json or the agent's Markdown file, followed by your top-level rules for Slack tools."
 
 // Every state and error code, with the exact message and next step each surface shows.
 const STATES: readonly (readonly [string, StatusInput, Pick<Status, "state" | "code" | "message" | "nextStep" | "detail">])[] = [
@@ -309,21 +310,16 @@ describe("unguarded agents", () => {
     expect(buildStatus(input({ agents, hostSupported: false, hostTested: false, active: false })).unguardedAgents).toEqual([])
   })
 
-  test("the next step names them once connected", () => {
-    expect(buildStatus(input({ agents })).nextStep).toBe(
-      'Put the default Slack rules shown under "Agents without default rules" first in each of these agents\' own permissions (agents.<name>.permissions), so they ask before Slack writes: custom, loose, reopened.',
-    )
+  test("the next step is the one fixed sentence every plugin uses, naming /slack-status", () => {
+    expect(buildStatus(input({ agents })).nextStep).toBe(AGENT_FIX)
   })
 
-  test("the fix puts the plugin's block in each agent's own permissions, never the top level", () => {
-    const rows = statusRows(buildStatus(input({ agents: [{ id: "custom", permissions: [...BASE_RULES] }] })))
-    const row = rows.find((item) => item.label === "Agents without default rules")
-    expect(row?.value).toStartWith("These agents run Slack writes and unknown tools without asking: custom. ")
-    expect(row?.value).toContain(`put these rules first in each agent's own "permissions" list (agents.<name>.permissions): `)
-    expect(row?.value).toContain("Follow them with your top-level rules for slack_ actions, so yours keep winning.")
-    expect(row?.value).toEndWith('Do not add them to the top-level "permissions": there they would loosen stricter agents such as explore.')
-    const block = /: (\[.*\])\. Follow/.exec(row?.value ?? "")?.[1]
-    expect(JSON.parse(block ?? "null")).toEqual(defaultRules("slack"))
+  test("the row lists the names only, then the plugin's block to paste, one rule per line", () => {
+    const row = statusRows(buildStatus(input({ agents }))).find((item) => item.label === "Agents without default rules")
+    const [names, ...block] = (row?.value ?? "").split("\n")
+    expect(names).toBe("custom, loose, reopened")
+    expect(JSON.parse(block.join("\n"))).toEqual(defaultRules("slack"))
+    expect(block.slice(1, -1).every((line) => line.startsWith('  { "action": '))).toBe(true)
   })
 
   test("following the fix guards the agent", () => {

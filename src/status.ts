@@ -125,10 +125,14 @@ export function shortReason(text: string): string | undefined {
 const quote = (rule: Rule) => `{ "action": "${rule.action}", "resource": "${rule.resource}", "effect": "${rule.effect}" }`
 
 /**
- * The fix for unguarded agents: the plugin's own default rules in that agent's own permissions. Never the
- * top-level permissions, which apply after every agent's base rules and so would loosen stricter agents.
+ * The fix for unguarded agents, the same sentence in every plugin of this family: the plugin's own default rules in
+ * each agent's own permissions. Never the top-level permissions, which apply after every agent's base rules and so
+ * would loosen stricter agents.
  */
-const remedy = (server: string) => `[${defaultRules(server).map(quote).join(", ")}]`
+const AGENT_FIX = "Put the default rules shown by /slack-status first in each listed agent's own permissions, in opencode.json or the agent's Markdown file, followed by your top-level rules for Slack tools."
+
+/** The block to paste, as a JSON list with one rule per line. */
+const remedy = (server: string) => `[\n${defaultRules(server).map((rule) => `  ${quote(rule)}`).join(",\n")}\n]`
 
 function connection(server: string, status: ServerStatus | undefined, unguarded: readonly string[], toolCount: number) {
   if (status === undefined) {
@@ -155,9 +159,7 @@ function connection(server: string, status: ServerStatus | undefined, unguarded:
     case "connected":
       return {
         state: "connected" as const, message: `Connected. Slack tools available: ${toolCount}.`,
-        nextStep: unguarded.length > 0
-          ? `Put the default Slack rules shown under "Agents without default rules" first in each of these agents' own permissions (agents.<name>.permissions), so they ask before Slack writes: ${unguarded.join(", ")}.`
-          : NOTHING_TO_DO,
+        nextStep: unguarded.length > 0 ? AGENT_FIX : NOTHING_TO_DO,
       }
   }
 }
@@ -293,10 +295,7 @@ export function statusRows(status: Status): { readonly label: string; readonly v
   })
   rows.push({
     label: "Agents without default rules",
-    value: status.unguardedAgents.length === 0 ? "none" : `These agents run Slack writes and unknown tools without asking: ${status.unguardedAgents.join(", ")}. `
-      + `In your OpenCode config, put these rules first in each agent's own "permissions" list (agents.<name>.permissions): ${remedy(status.server.name)}. `
-      + `Follow them with your top-level rules for ${status.server.name}_ actions, so yours keep winning. `
-      + "Do not add them to the top-level \"permissions\": there they would loosen stricter agents such as explore.",
+    value: status.unguardedAgents.length === 0 ? "none" : `${status.unguardedAgents.join(", ")}\n${remedy(status.server.name)}`,
   })
   rows.push(
     { label: "OpenCode", value: `${status.host.version ?? "unknown version"} (${status.host.tested ? "tested" : "untested"}; supported range ${status.host.range})` },

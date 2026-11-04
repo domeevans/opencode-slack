@@ -99,7 +99,7 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         const text = await slashStatus("defaults")
         expect(text).toStartWith("Slack\nConnection: connected. ")
         expect(text).toContain(`Client: ${CLIENT_ID} (public, PKCE; set in plugin options)`)
-        expect(text).toContain("Agents without default rules: These agents run Slack writes and unknown tools without asking: custom.")
+        expect(text).toContain('Agents without default rules: custom\n[\n  { "action": "slack_*", "resource": "*", "effect": "ask" },')
         expect(text).toContain(`OpenCode: ${host.version} (tested; supported range >=2.2.3 <2.3.0)`)
       })
 
