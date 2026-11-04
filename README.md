@@ -6,7 +6,7 @@ Unofficial; not affiliated with Slack. Slack is a trademark of Slack Technologie
 
 ## Requirements
 
-- OpenCode `>=2.2.3 <2.3.0`, tested on 2.2.3 and 2.2.4; macOS and Linux.
+- OpenCode `>=2.2.3 <2.3.0`, tested on 2.2.3, 2.2.4 and 2.2.5; macOS and Linux. Outside that range the plugin sets nothing up and `/slack-status` says why, unless you set `allowUntestedHost`.
 - A Slack app that your organisation owns, with Slack's MCP server turned on. Slack lets only internal apps and Slack Marketplace apps use its MCP server. If your organisation has none, someone who can create apps in your workspace makes one from the [app manifest](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/slack-app-manifest.json): see [Create the Slack app](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#create-the-slack-app).
 
 ## Install
@@ -14,6 +14,10 @@ Unofficial; not affiliated with Slack. Slack is a trademark of Slack Technologie
 ```sh
 opencode plugin add @joe-broadhead/opencode-slack
 ```
+
+Run `opencode reload`, or restart OpenCode. Then run `/slack-status`: it shows `not configured` until you give OpenCode your Slack app's client ID (see [Sign in](#sign-in)).
+
+**Update** with `opencode plugin update @joe-broadhead/opencode-slack`, then run `opencode reload`. An entry pinned to a version, such as `@joe-broadhead/opencode-slack@0.0.2`, does not update: remove the `@version` from its `plugins` entry first.
 
 ## Sign in
 
@@ -201,10 +205,13 @@ A script's errors from the tools RPC have their own codes, listed in [Scripting]
 
 ## Uninstall
 
-1. Run `opencode plugin remove @joe-broadhead/opencode-slack`.
-2. Sign out of Slack: `opencode mcp logout slack`.
-3. If you saved a client ID, remove the **Slack app** entry: in `/connect`, choose **Slack app** and delete the account, or run `opencode auth logout slack-app`.
-4. Remove any Slack rules you copied into your agents' own `permissions`.
+Sign out while the plugin is still installed: once it is removed, OpenCode no longer knows the `slack` server or the **Slack app** entry, so it cannot remove their credentials, and `opencode auth list` stops showing them.
+
+1. Sign out of Slack: `opencode mcp logout slack`.
+2. If you saved a client ID in `/connect`, remove it: `opencode auth logout slack-app`, and choose the **Slack app** account. Without a terminal, name it: `opencode auth logout slack-app "Slack app"`.
+3. Check: `opencode auth list` lists neither **Slack** nor **Slack app**.
+4. Remove the plugin: `opencode plugin remove @joe-broadhead/opencode-slack`, then `opencode reload`. `opencode mcp list` no longer lists `slack`.
+5. Remove any Slack rules you copied into your agents' own `permissions`.
 
 ## Links
 

@@ -7,6 +7,8 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 
 - The `slack-search` skill, the README and `docs/scripting.md` taught search parameters that Slack's server does not have. Every search tool takes one required `query`: keywords or a question, narrowed with Slack's search modifiers such as `in:#channel`, `from:<@U…>`, `after:` and `before:`. A test now checks every parameter the skill and the docs name against Slack's live tool schemas.
+- The README's Uninstall steps failed: once the plugin was removed, `opencode mcp logout slack` answered "MCP server not found", and the Slack sign-in and the saved client ID stayed in OpenCode's credential store. Uninstall now signs out first, checks with `opencode auth list`, then removes the plugin.
+- The README now says what to do after `opencode plugin add` (run `opencode reload`, then `/slack-status`) and how to update the plugin.
 
 ## [0.0.2] - 2026-11-03
 
