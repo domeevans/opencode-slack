@@ -4,7 +4,12 @@
 package's `package.json` as JSON, without loading the plugin, when a person reviews the exact
 version, and uses it as follows.
 
-Jelly names the plugin **Slack** (`jelly.title`), with the package name and version beneath.
+Jelly names the plugin **Slack** (`jelly.title`), with the package name and version beneath. Under
+that name it shows the one line in `jelly.summary`, and beside it the mark in `jelly.icon`
+(`assets/icon.svg`, shipped in the package): Jelly reads that file once, when it records the
+plugin, and keeps it only if it is a clean SVG of drawing elements, with no script, style, link
+or outside reference. A Jelly whose declaration schema lacks `summary` or `icon` refuses this
+declaration, because that schema accepts no unknown keys.
 
 ## Tools and permissions
 
