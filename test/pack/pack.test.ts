@@ -131,6 +131,8 @@ describe("the tarball", () => {
     const { files, entryCount, unpackedSize } = pack()
     const paths = files.map((file) => file.path).sort()
     expect(paths).toEqual(expectedFiles())
+    // The one asset is Jelly's icon.
+    expect(paths.filter((path) => path.startsWith("assets/"))).toEqual(["assets/icon.svg"])
     expect(paths.filter((path) => /\.(?:tsx|jsx)$/.test(path) || path.includes("node_modules/"))).toEqual([])
     for (const target of Object.values(pkg.exports)) expect(paths).toContain(target.replace(/^\.\//, ""))
     expect(paths.filter((path) => path.endsWith(".d.ts"))).toEqual([])

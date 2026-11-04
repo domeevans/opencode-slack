@@ -16,7 +16,8 @@ import { fakeHost } from "./fakes.js"
 
 type Tool = { name: string; permission: string; effect: string; readOnly: boolean }
 type SignIn = { id: string; label: string; integration?: string; server?: string; after?: string; presetBy?: string; help?: { url: string; label: string } }
-const jelly = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")).jelly as { tools: Tool[]; skills: string[]; signIns: SignIn[] }
+const manifest = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { files: string[]; jelly: { summary: string; icon: string; tools: Tool[]; skills: string[]; signIns: SignIn[] } }
+const jelly = manifest.jelly
 const rules: readonly { action: string; resource: string; effect: string }[] = [{ action: "*", resource: "*", effect: "allow" }, ...defaultRules("slack")]
 const wildcard = (pattern: string) => new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replaceAll("*", ".*")}$`)
 const effectOf = (action: string) => [...rules].reverse().find((rule) => wildcard(rule.action).test(action) && rule.resource === "*")?.effect
@@ -35,6 +36,30 @@ describe("the jelly declaration", () => {
 
   test("names every skill the package ships", () => {
     expect([...jelly.skills].sort()).toEqual(readdirSync(new URL("../../skills", import.meta.url)).sort())
+  })
+
+  // Jelly keeps an icon only if its cleaner passes it (hey-jelly's plugin-icon.ts); this checks the same vocabulary
+  // without importing Jelly. The cleaner refuses <title> (hey-jelly issue #33).
+  describe("summary and icon", () => {
+    const ELEMENTS = ["svg", "g", "path", "circle", "ellipse", "rect", "line", "polyline", "polygon", "defs", "linearGradient", "radialGradient", "stop", "clipPath", "mask"]
+
+    test("the summary is one line of 1 to 120 characters", () => {
+      expect(jelly.summary).toBe(jelly.summary.trim())
+      expect(jelly.summary.length).toBeGreaterThan(0)
+      expect(jelly.summary.length).toBeLessThanOrEqual(120)
+      expect(jelly.summary).not.toContain("\n")
+    })
+
+    test("the icon is a small SVG the package ships, drawn only with elements Jelly's cleaner keeps, and no title", () => {
+      expect(jelly.icon).toBe("assets/icon.svg")
+      expect(manifest.files).toContain(jelly.icon)
+      const svg = readFileSync(new URL(`../../${jelly.icon}`, import.meta.url), "utf8")
+      expect(svg.length).toBeLessThan(2048)
+      expect(svg.trim()).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 48 48"[ >]/)
+      expect(svg).not.toMatch(/<title|<\?xml|<!|&|<script|<style|href=/i)
+      const names = [...svg.matchAll(/<\/?([A-Za-z][A-Za-z0-9]*)/g)].map((match) => match[1])
+      expect(names.filter((name) => !ELEMENTS.includes(name!))).toEqual([])
+    })
   })
 
   describe("sign-ins", () => {
