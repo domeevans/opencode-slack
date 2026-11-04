@@ -11,7 +11,9 @@
  *   the agent's rules, the session's rules and saved approvals, and sends OpenCode's own credential;
  * - a plugin-owned tool runs its own spec, with its own `ctx.permission.assert` calls;
  * - an `ask` is refused at once, because no one is there to answer it: an `evaluate` hook turns it into a deny, only
- *   for this RPC's own calls in flight (their source ids), so no other call is touched.
+ *   for this RPC's own calls in flight (their source ids), so no other call is touched;
+ * - a deny names the refused action, the method's own or an inner one, and says to change the rule: a rule deny never
+ *   reaches `evaluate` hooks, so its action comes from OpenCode's own `Permission denied: <action>` text.
  * Only known reads become methods. Writes, sends, unknown tools and local-file exports never do.
  *
  * The executor bypasses `execute.before` and `execute.after` hooks, so `shapeResult` applies here whatever those
@@ -79,7 +81,7 @@ export interface McpResult {
 }
 
 /** Every code the module itself returns. ACCOUNT_UNKNOWN only with per-account servers. */
-export type Code =
+type Code =
   | "SESSION_UNKNOWN"
   | "SESSION_AGENT_REQUIRED"
   | "PERMISSION_DENIED"
@@ -94,10 +96,18 @@ export type Code =
   | "CANCELLED"
   | "ACCOUNT_UNKNOWN"
 
-export type NextSteps = Readonly<Record<Exclude<Code, "ACCOUNT_UNKNOWN">, string>> & { readonly ACCOUNT_UNKNOWN?: string }
+/** The codes only an MCP method raises. A block without MCP methods may omit their next steps. */
+const MCP_ONLY = ["SERVER_CONFLICT", "AUTH_REQUIRED", "CONNECTING", "CONNECTION_FAILED", "DISABLED", "NOT_REGISTERED", "TOOL_UNAVAILABLE", "UPSTREAM_ERROR"] as const
+type McpCode = (typeof MCP_ONLY)[number]
+
+/**
+ * One next step per code. The MCP-only steps are required, at registration, only for a block with MCP methods, and
+ * SERVER_CONFLICT not even then: the shared default names the server. ACCOUNT_UNKNOWN only with per-account servers.
+ */
+type NextSteps = Readonly<Record<Exclude<Code, McpCode | "ACCOUNT_UNKNOWN">, string>> & { readonly [code in McpCode | "ACCOUNT_UNKNOWN"]?: string }
 
 /** A refusal: the RPC error `failed` with this message and `data: { code, next }`. */
-export interface Failure {
+interface Failure {
   readonly code: string
   /** What happened, without the code or a final full stop. */
   readonly what: string
@@ -258,7 +268,16 @@ class ScriptError extends Error {
   }
 }
 
-const fail = (code: Exclude<Code, "ACCOUNT_UNKNOWN">, what: string) => new ScriptError({ code, what, next: NEXT_STEPS[code] })
+const fail = (code: Exclude<Code, "ACCOUNT_UNKNOWN">, what: string) => {
+  const next = NEXT_STEPS[code]
+  // registerToolsRpc checks the MCP-only steps for a block with MCP methods, so this is a bug in the module.
+  if (next === undefined) throw new Error(`tools-rpc: NEXT_STEPS.${code} is missing`)
+  return new ScriptError({ code, what, next })
+}
+
+/** SERVER_CONFLICT's next step: the block's own, or the shared default that names the server. */
+const conflictNext = (server: string) =>
+  NEXT_STEPS.SERVER_CONFLICT ?? `Remove your own "${server}" server from opencode.json so that the plugin manages it, then run "opencode reload".`
 
 const record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
 
@@ -277,6 +296,12 @@ const requestAction = (cause: unknown): string | undefined => {
   const request = record(cause) ? cause["request"] : undefined
   return record(request) && typeof request["action"] === "string" && request["action"] !== "" ? request["action"] : undefined
 }
+
+/**
+ * The action in OpenCode's fixed text for a rule deny, `Permission denied: <action>`. A rule deny never reaches
+ * `evaluate` hooks and its cause carries no request, so this text is how the refusal can name the action.
+ */
+const deniedAction = (message: string): string | undefined => /^Permission denied: ([\w.:-]*[\w-])\.?\s*$/.exec(message.split(/\r?\n/, 1)[0] ?? "")?.[1]
 
 /** Host wildcards: `*` matches any run of characters and `?` one character, over the whole string. */
 const wildcard = (pattern: string, value: string) =>
@@ -349,14 +374,17 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
   const accounts = typeof mcp?.server === "function"
   if (KNOWN_READS.length > 0 && !mcp) throw new Error("registerToolsRpc: KNOWN_READS needs the mcp option")
   if (accounts && NEXT_STEPS.ACCOUNT_UNKNOWN === undefined) throw new Error("registerToolsRpc: per-account servers need NEXT_STEPS.ACCOUNT_UNKNOWN")
+  const missing = KNOWN_READS.length > 0 ? MCP_ONLY.find((code) => code !== "SERVER_CONFLICT" && NEXT_STEPS[code] === undefined) : undefined
+  if (missing) throw new Error(`registerToolsRpc: MCP methods need NEXT_STEPS.${missing}`)
   const names = [...KNOWN_READS, ...owned.map((method) => method.name)]
   const duplicate = names.find((name, index) => name === "describe" || names.indexOf(name) !== index)
   if (duplicate) throw new Error(`registerToolsRpc: the method name "${duplicate}" is taken`)
 
   // This RPC's calls in flight, by the source id their permission checks carry.
   const live = new Set<string>()
-  // The action of each live call's last refused check, by source id: the request that asked, which may not be the method's.
-  const refused = new Map<string, string>()
+  // Each live call's last refused check the hook saw, by source id: its action, which may not be the method's, and its
+  // effect. A rule deny never reaches the hook, so only asks (and other hooks' denies) are recorded here.
+  const refused = new Map<string, { readonly action: string; readonly effect: "ask" | "deny" }>()
 
   const serverOf = (account: string | undefined): string => {
     const server = typeof mcp!.server === "function" ? mcp!.server(account) : mcp!.server
@@ -401,9 +429,14 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
     return own ? new ScriptError({ code: own.code, what, next: own.next }) : fail(code, what)
   }
 
+  /** The next step for a deny rule: no prompt can be answered, so the rule itself must change. */
+  const denyNext = (action: string, agent: string) =>
+    `Remove or narrow the deny rule for ${action} in the agent "${agent}" or in the session, or add a later allow rule for ${action} to the session, or use a session whose agent allows it.`
+
   /**
-   * A refused permission check. `asked` is the action whose check was refused, when that is known and is not the
-   * method's own, such as a speech download that a transcription asks for: the message and the next step name it.
+   * A refused ask (the hook turned it into a deny). `asked` is the action whose check was refused, when that is known
+   * and is not the method's own, such as a speech download that a transcription asks for: the message and the next
+   * step name it.
    */
   const denied = (action: string, error: unknown, asked = action) => {
     const reason = upstreamText(record(error) && typeof error["message"] === "string" ? error["message"] : String(error))
@@ -413,6 +446,16 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
       what: `${action} needs ${asked}, which was refused for this session's agent: ${reason}`,
       next: `Add an allow rule for ${asked} to the session's agent or to the session, or use a session whose agent allows it.`,
     })
+  }
+
+  /**
+   * A check a deny rule refused, the method's own or an inner one such as the read Plaud's recent makes: the message
+   * names the action as for an ask, and the next step says to change the rule, naming the session's agent.
+   */
+  const ruleDenied = (action: string, error: unknown, agent: string, inner = action) => {
+    const reason = upstreamText(record(error) && typeof error["message"] === "string" ? error["message"] : String(error))
+    const what = inner === action ? `${action} was refused by a deny rule for this session's agent: ${reason}` : `${action} needs ${inner}, which a deny rule refuses for this session's agent: ${reason}`
+    return new ScriptError({ code: "PERMISSION_DENIED", what, next: denyNext(inner, agent) })
   }
 
   /** A method's call: the permission action the hidden-tool check uses, and how it runs as the session. */
@@ -429,7 +472,9 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
       action,
       mcp: true,
       async run(call) {
-        if (!mcp!.managed(server)) throw fail("SERVER_CONFLICT", `the "${server}" server in your config is not the one this plugin manages`)
+        if (!mcp!.managed(server)) {
+          throw new ScriptError({ code: "SERVER_CONFLICT", what: `the "${server}" server in your config is not the one this plugin manages`, next: conflictNext(server) })
+        }
         const tool = (await ctx.tool.list()).find((entry) => entry.id === action)
         if (!tool) throw await unavailable(server, action, "TOOL_UNAVAILABLE")
         let result: ToolResult
@@ -461,11 +506,15 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
     const envelope = raw as Envelope
     let method: Target | undefined
     let id: string | undefined
+    let agent: string | undefined
     try {
       if (context.signal.aborted) throw fail("CANCELLED", "the call was cancelled")
       method = target(envelope)
-      const { agent, rules } = await session(envelope.sessionID)
-      if (hidden(rules, method.action)) throw fail("PERMISSION_DENIED", `${method.action} is hidden from this session's agent by a deny rule`)
+      const resolved = await session(envelope.sessionID)
+      agent = resolved.agent
+      if (hidden(resolved.rules, method.action)) {
+        throw new ScriptError({ code: "PERMISSION_DENIED", what: `${method.action} is hidden from this session's agent by a deny rule`, next: denyNext(method.action, agent) })
+      }
       id = `script:${randomUUID()}`
       const call: ToolCall = {
         sessionID: envelope.sessionID,
@@ -483,7 +532,7 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
         live.delete(call.id)
       }
     } catch (error) {
-      const failure = refusal(error, method, context.signal, id === undefined ? undefined : refused.get(id))
+      const failure = refusal(error, method, context.signal, agent, id === undefined ? undefined : refused.get(id))
       if (!failure) throw error
       return context.error("failed", new ScriptError(failure).message, { code: failure.code, next: failure.next })
     } finally {
@@ -492,13 +541,25 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
   }
 
   /** The failure a script reads, or undefined for a host error that propagates unchanged. */
-  const refusal = (error: unknown, method: Target | undefined, signal: AbortSignal, asked?: string): Failure | undefined => {
+  const refusal = (
+    error: unknown,
+    method: Target | undefined,
+    signal: AbortSignal,
+    agent: string | undefined,
+    seen?: { readonly action: string; readonly effect: "ask" | "deny" },
+  ): Failure | undefined => {
     if (signal.aborted) return fail("CANCELLED", "the call was cancelled").failure
     if (error instanceof ScriptError) return error.failure
     const own = pluginError(error)
     if (own || !method || !toolError(error)) return own
     // A deny, or an ask the hook refused, carries its cause; an upstream failure (MCP `isError`) has none.
-    if (error.error !== undefined) return denied(method.action, error, requestAction(error.error) ?? asked).failure
+    if (error.error !== undefined) {
+      const request = requestAction(error.error)
+      // An ask: the hook refused it, or the cause carries its request (only an ask has one). As before.
+      if (seen?.effect === "ask" || request !== undefined || agent === undefined) return denied(method.action, error, request ?? seen?.action).failure
+      // A deny: a rule deny reaches no hook and carries no request, so OpenCode's own text names its action.
+      return ruleDenied(method.action, error, agent, seen?.action ?? deniedAction(error.message) ?? method.action).failure
+    }
     if (method.mcp) return fail("UPSTREAM_ERROR", `${method.action} failed: ${upstreamText(error.message)}`).failure
     return undefined
   }
@@ -585,8 +646,8 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
   // calls in flight match, so the model's calls and other plugins' calls are never touched. The hook only tightens.
   const hook = await ctx.permission.hook("evaluate", (evaluation) => {
     if (evaluation.source === undefined || !live.has(evaluation.source.id) || evaluation.effect === "allow") return
-    // Remember which check was refused, so the refusal names it; an allow or a deny is never changed.
-    refused.set(evaluation.source.id, evaluation.action)
+    // Remember which check was refused and how, so the refusal names it; an allow or a deny is never changed.
+    refused.set(evaluation.source.id, { action: evaluation.action, effect: evaluation.effect === "ask" ? "ask" : "deny" })
     if (evaluation.effect !== "ask") return
     evaluation.effect = "deny"
     evaluation.message = UNATTENDED

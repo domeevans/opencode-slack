@@ -83,7 +83,7 @@ A refusal or failure is the RPC error `failed`, with a message `CODE: what happe
 | --- | --- |
 | `SESSION_UNKNOWN` | OpenCode says the session does not exist. Any other failure to look the session up is OpenCode's own error. |
 | `SESSION_AGENT_REQUIRED` | The session names no agent, or an agent that does not exist. |
-| `PERMISSION_DENIED` | The agent's or the session's rules deny the tool, or ask for an approval. The message names the action whose check was refused. |
+| `PERMISSION_DENIED` | The agent's or the session's rules deny the tool, or ask for an approval. The message names the action whose check was refused. For a deny, the next step names that action and the agent: remove or narrow the deny rule, add a later allow rule to the session, or use a session whose agent allows it. For an ask, it says to add an allow rule. |
 | `SERVER_CONFLICT` | Your OpenCode config defines its own server under the plugin's server name, which this plugin does not manage (`SERVER_NAME_IN_USE` in `/slack-status`). |
 | `CLIENT_ID_MISSING`, `CLIENT_ID_INVALID` | No Slack app client ID is set, or the one saved in `/connect` is empty or has spaces, so the plugin added no Slack server. The next step is the one `/slack-status` gives: run `/connect`, choose **Slack app** and paste the client ID. A client ID saved in `/connect` applies to the next call. `describe` gives the same code as each method's `reason`. |
 | `AUTH_REQUIRED`, `CONNECTING`, `CONNECTION_FAILED`, `DISABLED`, `NOT_REGISTERED` | The Slack server needs a sign-in, is still connecting (also when it reconnected during the call), could not connect, is disabled, or is not registered although a client ID is set. `/slack-status` gives the details. |
