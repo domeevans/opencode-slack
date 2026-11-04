@@ -8,7 +8,7 @@ import { SlackRpc } from "./rpc.js"
 import { registerServer } from "./server.js"
 import { NAMESPACE_DESCRIPTION } from "./tools.js"
 import { loadSkills } from "./skills.js"
-import { buildStatus, formatStatus, UNAVAILABLE } from "./status.js"
+import { buildStatus, clientNextStep, formatStatus, UNAVAILABLE } from "./status.js"
 import { VERSION } from "./version.js"
 
 const STARTUP_POLL_MS = 250
@@ -132,10 +132,20 @@ export default Plugin.define({
     })
 
     // Scripts call the known reads with no model, as a session and its agent. A user's own server under the name is
-    // not this plugin's. Invalid options or an untested host register no server, so no tools RPC either.
+    // not this plugin's. Invalid options or an untested host register no server, so no tools RPC either. Without a
+    // usable client ID there is no server either: a call gets status's code and next step, read at each call, so a
+    // client saved in /connect applies at once.
     const stopTools = options === undefined
       ? async () => {}
-      : await registerToolsRpc(ctx, { mcp: { server: options.server, managed: () => !nameInUse } })
+      : await registerToolsRpc(ctx, {
+        mcp: {
+          server: options.server,
+          managed: () => !nameInUse,
+          notRegistered: () => client.client !== undefined
+            ? undefined
+            : { code: client.invalid ? "CLIENT_ID_INVALID" : "CLIENT_ID_MISSING", next: clientNextStep(options.server) },
+        },
+      })
 
     await ctx.command.transform((editor) => {
       editor.add({

@@ -223,11 +223,16 @@ export function buildStatus(input: StatusInput): Status {
       ...(input.client.invalid
         ? { code: "CLIENT_ID_INVALID" as const, message: `The client ID saved in the /connect ${app} entry is empty or has spaces, so Slack is not added.` }
         : { code: "CLIENT_ID_MISSING" as const, message: `No Slack app client ID is set, so Slack is not added. To create the app, use the manifest at ${APP_MANIFEST_URL}.` }),
-      nextStep: `Run /connect and choose ${app}, then paste your Slack app's client ID.`,
+      nextStep: clientNextStep(server),
     }
   }
   const status = input.servers.find((item) => item.name === server)?.status
   return { ...base, ...connection(server, status, unguardedAgents, names.length) }
+}
+
+/** The next step while no usable Slack app client ID is set: status's, and the tools RPC's for CLIENT_ID_MISSING. */
+export function clientNextStep(server: string): string {
+  return `Run /connect and choose ${appDisplayName(server)}, then paste your Slack app's client ID.`
 }
 
 /** The callback to register, and for an `https:` one where its proxy forwards it: OpenCode's listener, same path. */

@@ -134,13 +134,31 @@ describe("the tools RPC in setup", () => {
     expect(host.executed).toEqual([])
   })
 
-  test("without a Slack app client ID, gives the same next step as /slack-status's CLIENT_ID_MISSING", async () => {
+  test("without a Slack app client ID, refuses with /slack-status's CLIENT_ID_MISSING and its next step, in calls and describe", async () => {
     const host = await setUp({ options: {}, tools: [] })
     const status = (await host.status()) as { code: string; nextStep: string }
-    expect(status.code).toBe("CLIENT_ID_MISSING")
-    const refused = await host.script("slack_search_public", "ses_build", { query: "q" })
-    expect(refused).toMatchObject({ error: "failed", data: { code: "NOT_REGISTERED", next: NEXT_STEPS.NOT_REGISTERED } })
-    expect(NEXT_STEPS.NOT_REGISTERED).toStartWith(status.nextStep.replace(/\.$/, ""))
+    expect(status).toMatchObject({ code: "CLIENT_ID_MISSING", nextStep: "Run /connect and choose Slack app, then paste your Slack app's client ID." })
+    const refused = (await host.script("slack_search_public", "ses_build", { query: "q" })) as { message: string }
+    expect(refused).toMatchObject({ error: "failed", data: { code: "CLIENT_ID_MISSING", next: status.nextStep } })
+    expect(refused.message).toBe(`CLIENT_ID_MISSING: the "slack" server is not registered. Next step: ${status.nextStep}`)
+    const described = (await host.script("describe", "")) as { methods: { available: boolean; reason?: string }[] }
+    expect(described.methods.map((method) => [method.available, method.reason])).toEqual(KNOWN_READS.map(() => [false, "CLIENT_ID_MISSING"]))
+    expect(host.executed).toEqual([])
+  })
+
+  test("with a client ID in /connect that is empty or has spaces, refuses with CLIENT_ID_INVALID and the same next step", async () => {
+    const host = await setUp({ options: {}, tools: [], credentials: { "slack-app": { type: "key", key: "C2 C3" } } })
+    const status = (await host.status()) as { code: string; nextStep: string }
+    expect(status.code).toBe("CLIENT_ID_INVALID")
+    expect(await host.script("slack_search_public", "ses_build", { query: "q" })).toMatchObject({ error: "failed", data: { code: "CLIENT_ID_INVALID", next: status.nextStep } })
+  })
+
+  test("with a custom server name, the next step names that server's Slack app entry", async () => {
+    const host = await setUp({ options: { server: "work" }, tools: [] })
+    expect(await host.script("slack_search_public", "ses_build", { query: "q" })).toMatchObject({
+      error: "failed",
+      data: { code: "CLIENT_ID_MISSING", next: "Run /connect and choose Slack app (work), then paste your Slack app's client ID." },
+    })
   })
 
   test("is disposed with its hook by the plugin's cleanup", async () => {

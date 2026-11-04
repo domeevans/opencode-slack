@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- The tools RPC, without a Slack app client ID, refuses with `CLIENT_ID_MISSING` (or `CLIENT_ID_INVALID` for a client ID saved in `/connect` that is empty or has spaces) instead of `NOT_REGISTERED`, with `/slack-status`'s next step: run `/connect`, choose Slack app and paste the client ID. `describe` gives the same code as each method's `reason`. `NOT_REGISTERED` now means a client ID is set but OpenCode has not registered the server, and its next step is to run `/slack-status`.
+
 ## [0.0.3] - 2026-11-04
 
 ### Added

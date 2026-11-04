@@ -186,6 +186,7 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         })
         sessions.reopen = await create({ agent: "locked", permissions: [permission("slack_slack_read_thread", "allow")] })
         sessions.collision = await create({ agent: "build" }, "collision")
+        sessions.unconfigured = await create({ agent: "build" }, "connect")
       }, 60_000)
 
       test("describes exactly the known reads, with their live schemas; no write, send or unknown tool is a method", async () => {
@@ -263,6 +264,16 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         expect(await run("collision", "slack_search_public", { query: "q" }, "collision")).toMatchObject({ type: "failed", code: "SERVER_CONFLICT" })
         const { value } = await script("describe", {}, "collision")
         expect(value.methods.every((method: { available: boolean; reason: string }) => !method.available && method.reason === "SERVER_CONFLICT")).toBe(true)
+      })
+
+      test("without a Slack app client ID, refuses with CLIENT_ID_MISSING and /slack-status's next step", async () => {
+        const next = "Run /connect and choose Slack app, then paste your Slack app's client ID."
+        expect(await status("connect")).toMatchObject({ code: "CLIENT_ID_MISSING", nextStep: next })
+        const refused = await run("unconfigured", "slack_search_public", { query: "q" }, "connect")
+        expect(refused).toMatchObject({ type: "failed", code: "CLIENT_ID_MISSING" })
+        expect(refused.message).toContain(`CLIENT_ID_MISSING: the "slack" server is not registered. Next step: ${next}`)
+        const { value } = await script("describe", {}, "connect")
+        expect(value.methods.every((method: { available: boolean; reason: string }) => !method.available && method.reason === "CLIENT_ID_MISSING")).toBe(true)
       })
 
       test("names an unknown session, a session without an agent, and rejects an envelope with extra keys", async () => {

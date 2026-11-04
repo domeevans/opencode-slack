@@ -332,7 +332,7 @@ The text surfaces show the rows `Connection`, `Account`, `Access`, `Server`, `Cl
 
 ## Errors
 
-Every error the plugin raises reads `CODE: What happened. Next step: What to do.` In status, the code and what happened are in the `Connection` row and the next step is the last row.
+Every error the plugin raises reads `CODE: What happened. Next step: What to do.` In status, the code and what happened are in the `Connection` row and the next step is the last row. The tools RPC gives `CLIENT_ID_MISSING` and `CLIENT_ID_INVALID` with the same next step ([scripting](scripting.md#errors)).
 
 
 | Code | Connection | Next step |
