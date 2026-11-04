@@ -1,13 +1,15 @@
 import { Plugin } from "@opencode/plugin"
 import { registerAppIntegration, resolveClient, sameClient, serverNamer, type ClientState } from "./connect.js"
-import { isTestedHost } from "./host-version.js"
+import { isSupportedHost, isTestedHost } from "./host-version.js"
 import { registerToolsRpc } from "./host/tools-rpc.js"
 import { parseOptions } from "./options.js"
 import { insertDefaultRules } from "./permissions.js"
 import { SlackRpc } from "./rpc.js"
 import { registerServer } from "./server.js"
+import { NAMESPACE_DESCRIPTION } from "./tools.js"
 import { loadSkills } from "./skills.js"
-import { buildStatus, formatStatus, UNAVAILABLE } from "./status.js"
+import { buildStatus, clientNextStep, formatStatus, UNAVAILABLE } from "./status.js"
+import { VERSION } from "./version.js"
 
 const STARTUP_POLL_MS = 250
 const STARTUP_WINDOW_MS = 10_000
@@ -41,10 +43,12 @@ export default Plugin.define({
   id: "slack.workspace",
   async setup(ctx) {
     const hostVersion = ctx.app.version
+    const hostSupported = isSupportedHost(hostVersion)
     const hostTested = isTestedHost(hostVersion)
     const parsed = parseOptions(ctx.options)
-    // An untested host or invalid options register only the status surfaces, which explain the problem.
-    const options = parsed.ok && (hostTested || parsed.options.allowUntestedHost) ? parsed.options : undefined
+    // A host outside the supported range, or invalid options, register only the status surfaces, which explain the
+    // problem. A release inside the range that the checks do not run on sets everything up; status calls it untested.
+    const options = parsed.ok && (hostSupported || parsed.options.allowUntestedHost) ? parsed.options : undefined
     const stopped = new AbortController()
     let nameInUse = false
     let client: ClientState = { invalid: false }
@@ -57,6 +61,8 @@ export default Plugin.define({
       await ctx.mcp.transform((editor) => {
         nameInUse = !registerServer(editor, options, client.client)
       })
+      // Code Mode's catalog describes the server's namespace with this text.
+      await ctx.tool.transform((editor) => editor.namespace({ name: options.server, description: NAMESPACE_DESCRIPTION }))
       await ctx.agent.transform((editor) => insertDefaultRules(editor, options.server))
       const skills = await loadSkills()
       await ctx.skill.transform((editor) => {
@@ -102,7 +108,9 @@ export default Plugin.define({
     }
 
     const status = async () => buildStatus({
+      version: VERSION,
       hostVersion,
+      hostSupported,
       hostTested,
       parsed,
       active: options !== undefined,
@@ -124,10 +132,20 @@ export default Plugin.define({
     })
 
     // Scripts call the known reads with no model, as a session and its agent. A user's own server under the name is
-    // not this plugin's. Invalid options or an untested host register no server, so no tools RPC either.
+    // not this plugin's. Invalid options or an untested host register no server, so no tools RPC either. Without a
+    // usable client ID there is no server either: a call gets status's code and next step, read at each call, so a
+    // client saved in /connect applies at once.
     const stopTools = options === undefined
       ? async () => {}
-      : await registerToolsRpc(ctx, { mcp: { server: options.server, managed: () => !nameInUse } })
+      : await registerToolsRpc(ctx, {
+        mcp: {
+          server: options.server,
+          managed: () => !nameInUse,
+          notRegistered: () => client.client !== undefined
+            ? undefined
+            : { code: client.invalid ? "CLIENT_ID_INVALID" : "CLIENT_ID_MISSING", next: clientNextStep(options.server) },
+        },
+      })
 
     await ctx.command.transform((editor) => {
       editor.add({

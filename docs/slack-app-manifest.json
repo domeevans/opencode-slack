@@ -5,8 +5,7 @@
   },
   "oauth_config": {
     "redirect_urls": [
-      "http://localhost:8765/callback",
-      "https://id.toqanjelly.ai/connect/callback"
+      "http://localhost:8765/callback"
     ],
     "scopes": {
       "user": [

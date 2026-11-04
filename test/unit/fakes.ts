@@ -15,6 +15,8 @@ type CommandDefinition = Parameters<Parameters<Parameters<Context["command"]["tr
 type ServerConfig = Parameters<McpEditor["set"]>[1]
 type SkillInfo = Parameters<SkillEditor["add"]>[0]
 type SyntheticInput = Parameters<Context["session"]["synthetic"]>[0]
+type ToolEditor = Parameters<Parameters<Context["tool"]["transform"]>[0]>[0]
+type Namespace = Parameters<ToolEditor["namespace"]>[0]
 
 /** The members of `Plugin.Context` that `setup` uses. */
 export type UsedContext = {
@@ -24,7 +26,7 @@ export type UsedContext = {
   readonly integration: Pick<Context["integration"], "transform" | "get"> & { readonly connection: Pick<Context["integration"]["connection"], "active" | "resolve" | "status"> }
   readonly event: Pick<Context["event"], "subscribe">
   readonly agent: Pick<Context["agent"], "transform" | "list" | "get">
-  readonly tool: Pick<Context["tool"], "list">
+  readonly tool: Pick<Context["tool"], "list" | "transform">
   readonly rpc: Pick<Context["rpc"], "register">
   readonly permission: Pick<Context["permission"], "hook">
   readonly command: Pick<Context["command"], "transform">
@@ -166,7 +168,11 @@ export function fakeHost(input: FakeHostInput = {}) {
   // Every registered RPC by ID; `rpc` is the first, the status RPC.
   const rpcs = new Map<string, Record<string, Handler>>()
   const rpc: { id?: string; handlers: Record<string, Handler> } = { handlers: {} }
+  // Every registered RPC contract by ID.
+  const contracts = new Map<string, { methods: Record<string, { input: unknown; output: unknown }> }>()
   const hooks = new Set<unknown>()
+  // Code Mode namespace descriptions, by name.
+  const namespaces = new Map<string, Namespace>()
   let failLists = false
 
   const registration = { dispose: async () => {} }
@@ -232,10 +238,18 @@ export function fakeHost(input: FakeHostInput = {}) {
         return { location: { directory: FAKE_LOCATION }, data: { id: found.id, permissions: found.permissions } }
       }) as never,
     },
-    tool: { list: async () => (input.tools ?? []) as never },
+    tool: {
+      list: async () => (input.tools ?? []) as never,
+      transform: async (callback) => {
+        calls.push("tool.transform")
+        callback({ namespace: (namespace: Namespace) => void namespaces.set(namespace.name, namespace) } as unknown as ToolEditor)
+        return registration
+      },
+    },
     rpc: {
-      register: (async (definition: { id: string }, handlers: Record<string, Handler>) => {
+      register: (async (definition: { id: string; methods: Record<string, { input: unknown; output: unknown }> }, handlers: Record<string, Handler>) => {
         calls.push("rpc.register")
+        contracts.set(definition.id, definition)
         if (rpc.id === undefined) {
           rpc.id = definition.id
           rpc.handlers = handlers
@@ -324,7 +338,9 @@ export function fakeHost(input: FakeHostInput = {}) {
     skills,
     rpc,
     rpcs,
+    contracts,
     hooks,
+    namespaces,
     script,
     status,
     slashStatus,

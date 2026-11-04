@@ -248,7 +248,7 @@ describe("parseOptions rejects", () => {
       code: "OPTIONS_INVALID",
       field: "allowUntestedHost",
       message: "Must be true or false.",
-      next: "Set it to true only to run on an OpenCode version this plugin is not tested with.",
+      next: "Set it to true only to run on an OpenCode version outside the supported range.",
     })
   })
 })

@@ -54,6 +54,7 @@ export const NEXT_STEPS: NextSteps = {
   CONNECTING: "Wait a few seconds, then call the method again.",
   CONNECTION_FAILED: "Run /slack-status and follow its next step.",
   DISABLED: "Enable the Slack server in /mcps, then call the method again.",
+  // Without a client ID, setup's notRegistered hook gives CLIENT_ID_MISSING or CLIENT_ID_INVALID and /connect instead.
   NOT_REGISTERED: "Run /slack-status and follow its next step.",
   TOOL_UNAVAILABLE: "Call describe to see which methods OpenCode lists now, and run /slack-status.",
   UPSTREAM_ERROR: "Check the input against the method's schema from describe, and run /slack-status if it keeps failing.",
@@ -117,6 +118,12 @@ export interface OwnedMethod {
    * as a tool does with its own context, so that the `evaluate` hook can tell this call's ask apart.
    */
   run(input: unknown, call: ToolCall): Promise<unknown>
+  /**
+   * Whether the method can run now, for describe only: undefined when it can, otherwise the plugin's own code for why
+   * not, such as a module that is turned off or has no build for this platform. Without it, describe reports the method
+   * as available. A call never consults it: `run` reports the same state as its own error.
+   */
+  available?(): string | undefined | Promise<string | undefined>
 }
 
 export interface ToolsRpcOptions {
@@ -129,6 +136,18 @@ export interface ToolsRpcOptions {
     readonly server: string | ((account: string | undefined) => string | undefined)
     /** False while the name belongs to a server the plugin does not manage, such as the user's own. */
     readonly managed: (server: string) => boolean
+    /**
+     * Optional. For a known read that OpenCode does not list, `describe` adds the text this returns as `detail`
+     * beside the code in `reason`, such as the toolset and option that turn the method on. Called with the method
+     * name and that code; undefined adds nothing. Without it, describe is unchanged.
+     */
+    readonly unavailableDetail?: (method: string, code: Code) => string | undefined
+    /**
+     * Optional. The code and next step used instead of NOT_REGISTERED while the server is not registered, such as a
+     * missing client ID that keeps the plugin from registering it; undefined keeps NOT_REGISTERED. Read at each call
+     * and each describe. Without it, NOT_REGISTERED stays.
+     */
+    readonly notRegistered?: (server: string) => { readonly code: string; readonly next: string } | undefined
   }
   /** Plugin-owned read tools. */
   readonly owned?: readonly OwnedMethod[]
@@ -144,6 +163,11 @@ export interface ToolCall {
   readonly id: string
   readonly signal: AbortSignal
   readonly progress: () => Promise<void>
+  /**
+   * A plugin-owned method's call only, with per-account servers: the envelope's `account`, already known to the
+   * `mcp.server` function. Absent when the envelope has none (the default account).
+   */
+  readonly account?: string
 }
 
 type Rule = { readonly action: string; readonly resource: string; readonly effect: "allow" | "deny" | "ask" }
@@ -176,6 +200,7 @@ const DESCRIBED = object(
     description: STRING,
     available: { type: "boolean" },
     reason: STRING,
+    detail: STRING,
     input: ANY_OBJECT,
     output: ANY_OBJECT,
   },
@@ -190,6 +215,25 @@ const DESCRIPTION = object({ id: STRING, call: STRING, location: STRING, methods
 
 const plainObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
 
+/** The envelope's messages, one wording for every plugin (README, "Envelope errors"). */
+const ENVELOPE_MESSAGES = {
+  notObject: `the envelope must be an object, such as {"sessionID":"<session>","input":<the tool's input>}`,
+  unknownKey: (key: string) => `"${key}" is not allowed`,
+  sessionID: `"sessionID" must be a non-empty string`,
+  account: `"account" must be a non-empty string`,
+  inputMissing: `"input" is missing`,
+  inputNotObject: `"input" must be an object`,
+  describe: "describe takes no input",
+} as const
+
+const standard = (schema: JsonSchema, validate: (value: unknown) => unknown): JsonSchema =>
+  Object.defineProperty({ ...schema }, "~standard", { value: { version: 1, vendor: "tools-rpc", validate }, enumerable: false })
+
+/** describe's input: nothing, or an empty object. Anything else gets one plain message. */
+const DESCRIBE_INPUT = standard(NO_INPUT, (value) =>
+  value === undefined || value === null || (plainObject(value) && Object.keys(value).length === 0) ? { value } : { issues: [{ message: ENVELOPE_MESSAGES.describe }] },
+)
+
 /**
  * A JSON Schema object with a strict validator attached. OpenCode decodes a plain JSON Schema with Effect, which drops
  * unknown keys of an object that has properties instead of refusing them; it prefers a Standard Schema validator when
@@ -198,12 +242,11 @@ const plainObject = (value: unknown): value is Record<string, unknown> => typeof
  */
 function strict(schema: JsonSchema, issues: (value: Record<string, unknown>) => string[]): JsonSchema {
   const keys = Object.keys(schema["properties"] as object)
-  const validate = (value: unknown) => {
-    if (!plainObject(value)) return { issues: [{ message: "Expected an object" }] }
-    const found = [...Object.keys(value).filter((key) => !keys.includes(key)).map((key) => `"${key}" is not allowed`), ...issues(value)]
+  return standard(schema, (value) => {
+    if (!plainObject(value)) return { issues: [{ message: ENVELOPE_MESSAGES.notObject }] }
+    const found = [...Object.keys(value).filter((key) => !keys.includes(key)).map(ENVELOPE_MESSAGES.unknownKey), ...issues(value)]
     return found.length === 0 ? { value } : { issues: found.map((message) => ({ message })) }
-  }
-  return Object.defineProperty({ ...schema }, "~standard", { value: { version: 1, vendor: "tools-rpc", validate }, enumerable: false })
+  })
 }
 
 class ScriptError extends Error {
@@ -228,6 +271,12 @@ function notFound(error: unknown, tags: readonly string[]): boolean {
 
 /** OpenCode's `Tool.Error`. A permission refusal carries its cause in `error`; an upstream failure has none. */
 const toolError = (error: unknown): error is { message: string; error?: unknown } => record(error) && error["_tag"] === "Tool.Error"
+
+/** The action of the permission request a refusal's cause carries (OpenCode's `Permission.Request`), if any. */
+const requestAction = (cause: unknown): string | undefined => {
+  const request = record(cause) ? cause["request"] : undefined
+  return record(request) && typeof request["action"] === "string" && request["action"] !== "" ? request["action"] : undefined
+}
 
 /** Host wildcards: `*` matches any run of characters and `?` one character, over the whole string. */
 const wildcard = (pattern: string, value: string) =>
@@ -306,6 +355,8 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
 
   // This RPC's calls in flight, by the source id their permission checks carry.
   const live = new Set<string>()
+  // The action of each live call's last refused check, by source id: the request that asked, which may not be the method's.
+  const refused = new Map<string, string>()
 
   const serverOf = (account: string | undefined): string => {
     const server = typeof mcp!.server === "function" ? mcp!.server(account) : mcp!.server
@@ -335,17 +386,33 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
     return { agent: info.agent as string, rules }
   }
 
+  /** The plugin's own code and next step for a server that is not registered, if its `notRegistered` hook gives one. */
+  const notRegistered = (server: string) => mcp?.notRegistered?.(server)
+
   /** Why the server's tool is missing: its connection state, or TOOL_UNAVAILABLE while it is connected. */
   const unavailable = async (server: string, tool: string, connected: Exclude<Code, "ACCOUNT_UNKNOWN">) => {
     const status = (await ctx.mcp.list()).data.find((entry) => entry.name === server)?.status.status
     const code = connection(status) ?? connected
     if (code === "TOOL_UNAVAILABLE") return fail(code, `OpenCode does not list ${tool} on the connected "${server}" server`)
-    return fail(code, `the "${server}" server ${STATUS_TEXT[code] ?? "is unavailable"}`)
+    // The call found the server not connected, and it reads connected now: it reconnected meanwhile.
+    if (status === "connected") return fail(code, `the "${server}" server was reconnecting when ${tool} ran`)
+    const what = `the "${server}" server ${STATUS_TEXT[code] ?? "is unavailable"}`
+    const own = code === "NOT_REGISTERED" ? notRegistered(server) : undefined
+    return own ? new ScriptError({ code: own.code, what, next: own.next }) : fail(code, what)
   }
 
-  const denied = (action: string, error: unknown) => {
-    const reason = record(error) && typeof error["message"] === "string" ? error["message"] : String(error)
-    return fail("PERMISSION_DENIED", `${action} was refused for this session's agent: ${upstreamText(reason)}`)
+  /**
+   * A refused permission check. `asked` is the action whose check was refused, when that is known and is not the
+   * method's own, such as a speech download that a transcription asks for: the message and the next step name it.
+   */
+  const denied = (action: string, error: unknown, asked = action) => {
+    const reason = upstreamText(record(error) && typeof error["message"] === "string" ? error["message"] : String(error))
+    if (asked === action) return fail("PERMISSION_DENIED", `${action} was refused for this session's agent: ${reason}`)
+    return new ScriptError({
+      code: "PERMISSION_DENIED",
+      what: `${action} needs ${asked}, which was refused for this session's agent: ${reason}`,
+      next: `Add an allow rule for ${asked} to the session's agent or to the session, or use a session whose agent allows it.`,
+    })
   }
 
   /** A method's call: the permission action the hidden-tool check uses, and how it runs as the session. */
@@ -371,7 +438,7 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
           result = await tool.execute(envelope.input as never, call as never)
         } catch (error) {
           // OpenCode's fixed message for a call to a server that is not connected.
-          if (error instanceof Error && error.message.startsWith(`MCP server "${server}" `)) throw await unavailable(server, action, "CONNECTION_FAILED")
+          if (error instanceof Error && error.message.startsWith(`MCP server "${server}" `)) throw await unavailable(server, action, "CONNECTING")
           throw error
         }
         return shapeResult(name, normalise(result))
@@ -379,25 +446,32 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
     }
   }
 
-  const ownedTarget = (spec: OwnedMethod, envelope: Envelope): Target => ({
-    action: spec.action,
-    mcp: false,
-    run: async (call) => (await spec.run(envelope.input, call)) ?? null,
-  })
+  const ownedTarget = (spec: OwnedMethod, envelope: Envelope): Target => {
+    // With per-account servers, an unknown account is ACCOUNT_UNKNOWN before the spec runs, as for an MCP method.
+    if (accounts) serverOf(envelope.account)
+    const account = accounts && envelope.account !== undefined ? { account: envelope.account } : {}
+    return {
+      action: spec.action,
+      mcp: false,
+      run: async (call) => (await spec.run(envelope.input, { ...call, ...account })) ?? null,
+    }
+  }
 
   const invoke = async (target: (envelope: Envelope) => Target, raw: unknown, context: RpcContext) => {
     const envelope = raw as Envelope
     let method: Target | undefined
+    let id: string | undefined
     try {
       if (context.signal.aborted) throw fail("CANCELLED", "the call was cancelled")
       method = target(envelope)
       const { agent, rules } = await session(envelope.sessionID)
       if (hidden(rules, method.action)) throw fail("PERMISSION_DENIED", `${method.action} is hidden from this session's agent by a deny rule`)
+      id = `script:${randomUUID()}`
       const call: ToolCall = {
         sessionID: envelope.sessionID,
         agent,
         messageID: MESSAGE_ID,
-        id: `script:${randomUUID()}`,
+        id,
         signal: context.signal,
         progress: async () => {},
       }
@@ -409,20 +483,22 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
         live.delete(call.id)
       }
     } catch (error) {
-      const failure = refusal(error, method, context.signal)
+      const failure = refusal(error, method, context.signal, id === undefined ? undefined : refused.get(id))
       if (!failure) throw error
       return context.error("failed", new ScriptError(failure).message, { code: failure.code, next: failure.next })
+    } finally {
+      if (id !== undefined) refused.delete(id)
     }
   }
 
   /** The failure a script reads, or undefined for a host error that propagates unchanged. */
-  const refusal = (error: unknown, method: Target | undefined, signal: AbortSignal): Failure | undefined => {
+  const refusal = (error: unknown, method: Target | undefined, signal: AbortSignal, asked?: string): Failure | undefined => {
     if (signal.aborted) return fail("CANCELLED", "the call was cancelled").failure
     if (error instanceof ScriptError) return error.failure
     const own = pluginError(error)
     if (own || !method || !toolError(error)) return own
     // A deny, or an ask the hook refused, carries its cause; an upstream failure (MCP `isError`) has none.
-    if (error.error !== undefined) return denied(method.action, error).failure
+    if (error.error !== undefined) return denied(method.action, error, requestAction(error.error) ?? asked).failure
     if (method.mcp) return fail("UPSTREAM_ERROR", `${method.action} failed: ${upstreamText(error.message)}`).failure
     return undefined
   }
@@ -437,7 +513,9 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
       for (const name of KNOWN_READS) {
         const id = `${server}_${name}`
         const tool = managed ? tools.find((entry) => entry.id === id) : undefined
-        const reason: Code | undefined = !managed ? "SERVER_CONFLICT" : tool ? undefined : (connection(status) ?? "TOOL_UNAVAILABLE")
+        const code: Code | undefined = !managed ? "SERVER_CONFLICT" : tool ? undefined : (connection(status) ?? "TOOL_UNAVAILABLE")
+        const reason = code === "NOT_REGISTERED" ? (notRegistered(server)?.code ?? code) : code
+        const detail = code === undefined ? undefined : mcp.unavailableDetail?.(name, code)
         const input = jsonSchema(tool?.input) ?? ANY_OBJECT
         const output = jsonSchema(tool?.output)
         methods.push({
@@ -448,13 +526,26 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
           description: tool?.description ?? "",
           available: reason === undefined,
           ...(reason ? { reason } : {}),
+          ...(detail === undefined ? {} : { detail }),
           input,
           output: mcpOutput(output),
         })
       }
     }
-    for (const spec of owned)
-      methods.push({ name: spec.name, tool: spec.name, kind: "plugin", action: spec.action, description: spec.description, available: true, input: spec.input, output: spec.output })
+    for (const spec of owned) {
+      const reason = await spec.available?.()
+      methods.push({
+        name: spec.name,
+        tool: spec.name,
+        kind: "plugin",
+        action: spec.action,
+        description: spec.description,
+        available: reason === undefined,
+        ...(reason === undefined ? {} : { reason }),
+        input: spec.input,
+        output: spec.output,
+      })
+    }
     return JSON.parse(
       JSON.stringify({
         id: TOOLS_RPC_ID,
@@ -469,15 +560,15 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
     strict(
       object({ sessionID: { type: "string", minLength: 1 }, ...(accounts ? { account: { type: "string", minLength: 1 } } : {}), input }, ["sessionID", "input"]),
       (value) => [
-        ...(typeof value["sessionID"] === "string" && value["sessionID"] !== "" ? [] : [`"sessionID" must be a non-empty string`]),
-        ...(value["account"] === undefined || (typeof value["account"] === "string" && value["account"] !== "") ? [] : [`"account" must be a non-empty string`]),
-        ...(!("input" in value) ? [`"input" is missing`] : objectInput && !plainObject(value["input"]) ? [`"input" must be an object`] : []),
+        ...(typeof value["sessionID"] === "string" && value["sessionID"] !== "" ? [] : [ENVELOPE_MESSAGES.sessionID]),
+        ...(value["account"] === undefined || (typeof value["account"] === "string" && value["account"] !== "") ? [] : [ENVELOPE_MESSAGES.account]),
+        ...(!("input" in value) ? [ENVELOPE_MESSAGES.inputMissing] : objectInput && !plainObject(value["input"]) ? [ENVELOPE_MESSAGES.inputNotObject] : []),
       ],
     )
   const contract = Rpc.define({
     id: TOOLS_RPC_ID,
     methods: {
-      describe: { input: NO_INPUT, output: DESCRIPTION },
+      describe: { input: DESCRIBE_INPUT, output: DESCRIPTION },
       ...Object.fromEntries(KNOWN_READS.map((name) => [name, { input: envelope(ANY_OBJECT, true), output: mcpOutput(), errors: { failed: FAILED } }])),
       ...Object.fromEntries(owned.map((spec) => [spec.name, { input: envelope(spec.input, false), output: spec.output, errors: { failed: FAILED } }])),
     },
@@ -493,7 +584,10 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
   // A script's ask has no one to answer it: refuse it now instead of leaving a prompt that waits. Only this RPC's own
   // calls in flight match, so the model's calls and other plugins' calls are never touched. The hook only tightens.
   const hook = await ctx.permission.hook("evaluate", (evaluation) => {
-    if (evaluation.effect !== "ask" || evaluation.source === undefined || !live.has(evaluation.source.id)) return
+    if (evaluation.source === undefined || !live.has(evaluation.source.id) || evaluation.effect === "allow") return
+    // Remember which check was refused, so the refusal names it; an allow or a deny is never changed.
+    refused.set(evaluation.source.id, evaluation.action)
+    if (evaluation.effect !== "ask") return
     evaluation.effect = "deny"
     evaluation.message = UNATTENDED
   })

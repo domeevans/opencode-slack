@@ -24,13 +24,13 @@ The plugin is configuration and status code around Slack's hosted MCP server. Op
 - `host/tools-rpc.ts`: the tools RPC. See [Tools RPC](#tools-rpc).
 - `status.ts`: the one status model and its rows. `/slack-status`, the RPC and the dialog all render it.
 - `skills.ts`: loads `skills/slack-search/SKILL.md`.
-- `host-version.ts`: the tested host range check.
+- `host-version.ts`: the supported range check, and the tested releases.
 
 ## Runtime flow
 
-1. Setup parses the options and checks the host version. On invalid options or an untested host it registers only the status surfaces.
+1. Setup parses the options and checks the host version. On invalid options, or a host outside the supported range, it registers only the status surfaces.
 2. Without `oauth.client_id`, it adds **Slack app** to `/connect` and reads the stored client from OpenCode's credential store.
-3. The MCP transform registers `https://mcp.slack.com/mcp` with that client, or nothing when there is none.
+3. The MCP transform registers `https://mcp.slack.com/mcp` with that client, or nothing when there is none. A tool transform gives the server's Code Mode namespace its description (`NAMESPACE_DESCRIPTION` in `tools.ts`).
 4. When the plugin is set up, the tools RPC registers after the status RPC, with the server name from the options. It is a conflict while `nameInUse` is set.
 5. A background listener handles `credential.updated` and `credential.switched` (the client changed: `ctx.mcp.reload()`) and `integration.updated` (OpenCode re-registered the server's integration: rename it **Slack** again). Setup's cleanup stops it.
 
@@ -55,4 +55,4 @@ A `Tool.Error` with a cause is a permission refusal; one without a cause is Slac
 
 OpenCode decodes a plain JSON Schema input with Effect, which drops unknown keys of an object that has properties instead of refusing them. So the envelope's schema carries a strict Standard Schema validator as a non-enumerable `~standard` property, which OpenCode prefers. The contract still reads and serialises as plain JSON Schema, and OpenCode answers a bad envelope with `rpc.invalid_input`.
 
-The executor does not run `execute.before` and `execute.after` hooks. Slack has none, so results are unchanged. `ctx.tool.list()` returning callable executors is not documented as an entry point: the host test checks the whole path on the embedded SDK and on stock 2.2.3 and 2.2.4, against the offline fake server.
+The executor does not run `execute.before` and `execute.after` hooks. Slack has none, so results are unchanged. `ctx.tool.list()` returning callable executors is not documented as an entry point: the host test checks the whole path on the embedded SDK and on stock 2.2.3, 2.2.4 and 2.2.5, against the offline fake server, which serves Slack's own tool schemas (`test/host/slack-catalog.ts`).

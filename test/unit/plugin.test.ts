@@ -3,6 +3,7 @@ import plugin from "../../src/index.js"
 import { defaultRules } from "../../src/permissions.js"
 import { parseOptions } from "../../src/options.js"
 import { serverConfig } from "../../src/server.js"
+import { NAMESPACE_DESCRIPTION } from "../../src/tools.js"
 import { agent, BASE_ALLOW, BASE_RULES, fakeHost, type FakeHostInput } from "./fakes.js"
 
 const cleanups: (() => Promise<void>)[] = []
@@ -27,7 +28,7 @@ const until = async (condition: () => boolean | Promise<boolean>) => {
 // The `/connect` rename of the Slack server's integration runs in the background, so these leave it out.
 const registrations = (calls: readonly string[]) => calls.filter((call) => call !== "integration.transform")
 // The status RPC, then the tools RPC and its evaluate hook.
-const FULL = ["mcp.transform", "agent.transform", "skill.transform", "rpc.register", "rpc.register", "evaluate hook", "command.transform"]
+const FULL = ["mcp.transform", "tool.transform", "agent.transform", "skill.transform", "rpc.register", "rpc.register", "evaluate hook", "command.transform"]
 const STATUS_ONLY = ["rpc.register", "command.transform"]
 const CONNECT = {}
 const stored = (key: string, metadata?: Record<string, string>) => ({ type: "key" as const, key, ...(metadata ? { metadata } : {}) })
@@ -50,6 +51,26 @@ describe("setup with a client ID in the options", () => {
     expect(host.commands.map((command) => command.name)).toEqual(["slack-status"])
     expect(host.commands[0]?.description).toBe("Show Slack sign-in, connection and permission status")
     expect(host.skills.map((skill) => skill.id)).toEqual(["slack-search"] as never)
+  })
+
+  test("describes the server's Code Mode namespace, under the configured server name", async () => {
+    expect([...(await setUp()).namespaces.values()]).toEqual([{ name: "slack", description: NAMESPACE_DESCRIPTION }])
+    expect([...(await setUp({ options: { oauth: { client_id: "C1" }, server: "work" } })).namespaces.keys()]).toEqual(["work"])
+    expect(NAMESPACE_DESCRIPTION).toContain("untrusted")
+    expect(NAMESPACE_DESCRIPTION.length).toBeLessThan(250)
+  })
+
+  test("the status RPC carries the plugin's version from package.json and the tested host", async () => {
+    const { version } = JSON.parse(await Bun.file(new URL("../../package.json", import.meta.url)).text()) as { version: string }
+    for (const host of ["2.2.3", "2.2.4", "2.2.5"])
+      expect(await (await setUp({ version: host })).status()).toMatchObject({ version, host: { version: host, range: ">=2.2.3 <2.3.0", tested: true } })
+  })
+
+  test("a release inside the supported range that the checks do not run on sets everything up, and status calls it untested", async () => {
+    const host = await setUp({ version: "2.2.6", status: { slack: { status: "connected" } } })
+    expect(registrations(host.calls)).toEqual(FULL)
+    expect(await host.status()).toMatchObject({ state: "connected", host: { version: "2.2.6", tested: false } })
+    expect((await host.slashStatus()).text).toContain("OpenCode: 2.2.6 (untested; supported range >=2.2.3 <2.3.0)")
   })
 
   test("registers Slack's MCP server with the configured OAuth app", async () => {
@@ -112,7 +133,7 @@ describe("setup with a client ID in the options", () => {
     const host = await setUp({ options: { oauth: { client_id: "C1" }, server: "work-slack" }, status: { "work-slack": { status: "disabled" } } })
     expect([...host.servers.keys()]).toEqual(["work-slack"])
     expect(host.agents[0]?.permissions[1]).toEqual({ action: "work-slack_*", resource: "*", effect: "ask" })
-    expect(await host.status()).toMatchObject({ state: "disabled", server: { name: "work-slack" }, next: "Enable work-slack in /mcps." })
+    expect(await host.status()).toMatchObject({ state: "disabled", server: { name: "work-slack" }, nextStep: "Enable work-slack in /mcps." })
     await until(() => host.integrations.get("mcp_work-slack")?.name === "Slack (work-slack)")
   })
 
@@ -121,7 +142,7 @@ describe("setup with a client ID in the options", () => {
     const host = await setUp({ servers: { slack: mine } })
     expect(host.servers.get("slack")).toStrictEqual(mine)
     expect(registrations(host.calls)).toEqual(FULL)
-    expect(await host.status()).toMatchObject({ state: "not_registered", code: "SERVER_NAME_IN_USE" })
+    expect(await host.status()).toMatchObject({ state: "conflict", code: "SERVER_NAME_IN_USE" })
     await Bun.sleep(50)
     expect(host.integrations.get("mcp_slack")?.name).not.toBe("Slack")
   })
@@ -134,7 +155,7 @@ describe("setup with a client ID in the options", () => {
     })
     expect(await host.status()).toMatchObject({
       state: "connected",
-      tools: { read: 1, private: 0, file: 0, write: 0, unknown: ["slack_brand_new"] },
+      tools: { read: 1, private: 0, file: 0, write: 0, unknown: 1, unknownNames: ["slack_brand_new"] },
       unguardedAgents: [],
       host: { version: "2.2.3", range: ">=2.2.3 <2.3.0", tested: true },
     })
@@ -220,10 +241,10 @@ describe("setup without a client ID in the options", () => {
     expect(host.agents[0]?.permissions[1]).toEqual({ action: "slack_*", resource: "*", effect: "ask" })
     const status = await host.status()
     expect(status).toMatchObject({
-      state: "no_client_id",
+      state: "not_configured",
       code: "CLIENT_ID_MISSING",
       message: "No Slack app client ID is set, so Slack is not added. To create the app, use the manifest at https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/slack-app-manifest.json.",
-      next: "Run /connect and choose Slack app, then paste your Slack app's client ID.",
+      nextStep: "Run /connect and choose Slack app, then paste your Slack app's client ID.",
     })
     expect(Object.keys(status as object)).not.toContain("client")
     expect((await host.slashStatus()).text).toEndWith("\nNext step: Run /connect and choose Slack app, then paste your Slack app's client ID.")
@@ -245,10 +266,10 @@ describe("setup without a client ID in the options", () => {
     const host = await setUp({ options: CONNECT, credentials: { "slack-app": stored("C2 C3") } })
     expect(host.servers.size).toBe(0)
     expect(await host.status()).toMatchObject({
-      state: "no_client_id",
+      state: "not_configured",
       code: "CLIENT_ID_INVALID",
       message: "The client ID saved in the /connect Slack app entry is empty or has spaces, so Slack is not added.",
-      next: "Run /connect and choose Slack app, then paste your Slack app's client ID.",
+      nextStep: "Run /connect and choose Slack app, then paste your Slack app's client ID.",
     })
     expect(host.connectionStatus.get("slack-app")).toEqual({ status: "needs_auth", message: "This is not a Slack client ID: it is empty or has spaces." })
     await until(() => host.subscribers() === 1)
@@ -268,7 +289,7 @@ describe("setup without a client ID in the options", () => {
     host.store("slack-app", undefined)
     await until(() => !host.servers.has("slack"))
     expect(host.calls.filter((call) => call === "mcp.reload").length).toBe(3)
-    expect(await host.status()).toMatchObject({ state: "no_client_id" })
+    expect(await host.status()).toMatchObject({ state: "not_configured" })
   })
 
   test("an unrelated credential change does not reload", async () => {
@@ -284,7 +305,7 @@ describe("setup without a client ID in the options", () => {
     expect(host.integrations.get("work-app")?.name).toBe("Slack app (work)")
     expect(host.servers.get("work")).toMatchObject({ oauth: { client_id: "C9" } })
     const status = await setUp({ options: { server: "other" } }).then((other) => other.status())
-    expect(status as object).toMatchObject({ next: "Run /connect and choose Slack app (other), then paste your Slack app's client ID." })
+    expect(status as object).toMatchObject({ nextStep: "Run /connect and choose Slack app (other), then paste your Slack app's client ID." })
   })
 })
 
@@ -293,6 +314,7 @@ describe("setup that registers only the status surfaces", () => {
     const host = await setUp({ version })
     expect(host.calls).toEqual(STATUS_ONLY)
     expect(host.servers.size).toBe(0)
+    expect(host.namespaces.size).toBe(0)
     expect(host.agents[0]?.permissions).toEqual([...BASE_RULES])
     expect(await host.status()).toMatchObject({ state: "host_untested", code: "HOST_UNTESTED", host: { version, tested: false } })
     expect((await host.slashStatus()).text).toContain("Connection: host untested. HOST_UNTESTED: ")
@@ -307,7 +329,7 @@ describe("setup that registers only the status surfaces", () => {
     const host = await setUp({ options })
     expect(host.calls).toEqual(STATUS_ONLY)
     const status = await host.status()
-    expect(status).toMatchObject({ state: "config_invalid", code: "OPTIONS_INVALID" })
+    expect(status).toMatchObject({ state: "not_configured", code: "OPTIONS_INVALID" })
     expect((status as { message: string }).message).toStartWith(`Option ${field}: `)
     expect((await host.slashStatus()).text).toContain("Connection: not configured. OPTIONS_INVALID: ")
   })
@@ -317,14 +339,14 @@ describe("setup that registers only the status surfaces", () => {
     expect(registrations(host.calls)).toEqual(FULL)
     expect(host.servers.get("slack")).toStrictEqual(serverConfig(options({ allowUntestedHost: true }), { id: "C1", source: "options" }))
     expect(await host.status()).toMatchObject({ state: "connecting", host: { version: "2.3.0-beta.1", tested: false } })
-    expect((await host.slashStatus()).text).toContain("OpenCode: 2.3.0-beta.1 (untested; tested range >=2.2.3 <2.3.0)")
+    expect((await host.slashStatus()).text).toContain("OpenCode: 2.3.0-beta.1 (untested; supported range >=2.2.3 <2.3.0)")
   })
 
   test("an untested host with allowUntestedHost and invalid options reports the invalid option", async () => {
     const host = await setUp({ version: "2.3.0", options: { oauth: { redirect_port: 1 }, allowUntestedHost: true } })
     expect(host.calls).toEqual(STATUS_ONLY)
     expect(await host.status()).toMatchObject({
-      state: "config_invalid",
+      state: "not_configured",
       code: "OPTIONS_INVALID",
       message: "Option oauth.redirect_port: This option is not supported.",
       host: { version: "2.3.0", tested: false },

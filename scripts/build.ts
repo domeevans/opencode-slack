@@ -37,6 +37,17 @@ const solid: Plugin = {
   },
 }
 
+/** The plugin's version, from package.json, as one string: the bundles do not carry the rest of package.json. */
+const version: Plugin = {
+  name: "version",
+  setup(editor) {
+    editor.onLoad({ filter: /[\\/]src[\\/]version\.ts$/ }, async () => {
+      const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { version: string }
+      return { contents: `export const VERSION = ${JSON.stringify(manifest.version)}`, loader: "ts" }
+    })
+  },
+}
+
 await rm(new URL("../dist", import.meta.url), { recursive: true, force: true })
 const result = await build({
   absWorkingDir: ROOT,
@@ -51,7 +62,7 @@ const result = await build({
   legalComments: "none",
   metafile: true,
   logLevel: "warning",
-  plugins: [solid],
+  plugins: [version, solid],
 })
 
 const problems = Object.entries(result.metafile.outputs).flatMap(([file, output]) =>

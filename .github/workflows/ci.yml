@@ -31,14 +31,15 @@ jobs:
         with:
           node-version: 24 # the embedded host in the tests needs Node 24 or later
           # Caches ~/.npm per OS and architecture. The host and package tests install the stock
-          # @opencode/cli releases named in test/host/harness.ts through npm, so that file is part of the key.
+          # @opencode/cli releases listed in src/defaults.ts (TESTED_HOSTS: 2.2.3, 2.2.4 and 2.2.5) through npm,
+          # so that file is part of the key.
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            test/host/harness.ts
+            src/defaults.ts
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.4 # the Bun inside stock OpenCode 2.2.3 and 2.2.4
+          bun-version: 1.4.4 # the Bun inside stock OpenCode 2.2.3, 2.2.4 and 2.2.5
       # OpenCode installs plugins with scripts off, and no dev dependency needs its install script.
       - run: npm ci --ignore-scripts
       - run: npm run check

@@ -27,7 +27,9 @@ interface Call {
 
 function status(overrides: Partial<StatusInput> = {}): Status {
   return buildStatus({
+    version: "9.9.9",
     hostVersion: "2.2.3",
+    hostSupported: true,
     hostTested: true,
     parsed: parseOptions({ oauth: { client_id: "TEST_CLIENT_ID" } }),
     active: true,
@@ -45,14 +47,14 @@ const EVENTS = ["server.connected", "mcp.status.changed", "agent.updated", "inte
 
 const STATES: readonly (readonly [string, Status])[] = [
   ["connected", status({ tools: [{ name: "slack_search_public", options: { namespace: "slack" } }, { name: "slack_brand_new", options: { namespace: "slack" } }] })],
-  ["not_signed_in", status({ servers: [{ name: "slack", status: { status: "needs_auth", error: "Authentication required" } }] })],
+  ["sign_in_required", status({ servers: [{ name: "slack", status: { status: "needs_auth", error: "Authentication required" } }] })],
   ["connecting", status({ servers: [{ name: "slack", status: { status: "pending" } }] })],
   ["disabled", status({ servers: [{ name: "slack", status: { status: "disabled" } }] })],
   ["failed", status({ servers: [{ name: "slack", status: { status: "failed", error: "invalid_auth" } }] })],
-  ["not_registered", status({ nameInUse: true })],
-  ["no_client_id", status({ client: { invalid: false } })],
-  ["config_invalid", status({ parsed: parseOptions({ oauth: { redirect_port: 1 } }), active: false })],
-  ["host_untested", status({ hostVersion: "3.0.0", hostTested: false, active: false })],
+  ["conflict", status({ nameInUse: true })],
+  ["not_configured (no client ID)", status({ client: { invalid: false } })],
+  ["not_configured (invalid options)", status({ parsed: parseOptions({ oauth: { redirect_port: 1 } }), active: false })],
+  ["host_untested", status({ hostVersion: "3.0.0", hostSupported: false, hostTested: false, active: false })],
 ]
 
 /** A TUI host: records RPC calls with their location and signal, event subscriptions, keymap layers and dialogs. */
@@ -206,11 +208,12 @@ describe("the dialog", () => {
     const lines = text.split("\n")
     expect(lines[0]).toBe("Slack")
     expect(lines[1]).toStartWith(`Connection ${stateLabel(value)}. ${value.code === undefined ? "" : `${value.code}: `}`)
-    expect(lines.at(-2)).toBe(`Next step ${value.next}`)
+    expect(lines.at(-2)).toBe(`Next step ${value.nextStep}`)
     expect(lines).toContain("Server slack at https://mcp.slack.com/mcp")
     expect(text).toContain("Asks before searching private channels")
     expect(lines).toContain(`Tools ${value.tools.read} read, ${value.tools.private} private search, ${value.tools.file} file, ${value.tools.write} write`
-      + (value.tools.unknown.length > 0 ? `; unknown (ask first): ${value.tools.unknown.join(", ")}` : ""))
+      + (value.tools.unknown > 0 ? `; ${value.tools.unknown} unknown (ask first): ${value.tools.unknownNames.join(", ")}` : ""))
+    expect(lines).toContain("Agents without default rules none")
     expect(lines.at(-1)).toBe("r refresh · esc close")
     expect(lines.filter((line) => line.startsWith("Client "))).toEqual(value.client === undefined ? [] : ["Client TEST_CLIENT_ID (public, PKCE; set in plugin options)"])
     expect(lines.filter((line) => line.startsWith("Callback "))).toEqual(value.callback === undefined ? [] : ["Callback http://localhost:8765/callback (register exactly this URL in the app's Redirect URLs)"])
