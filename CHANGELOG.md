@@ -9,7 +9,6 @@ All notable changes to this project are documented here. The format follows [Kee
 - OpenCode 2.2.5 is a tested release, next to 2.2.3 and 2.2.4.
 - Code Mode's catalog now describes the `slack` namespace: what the tools do, what asks first, and that Slack content is untrusted.
 - The status RPC has `version`, the plugin's version.
-- The `jelly` section declares the tools RPC's 14 methods in `jelly.rpc`, each read-only and under the permission of the tool it runs.
 
 ### Changed
 
