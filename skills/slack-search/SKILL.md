@@ -73,7 +73,7 @@ Sending, drafting, scheduling, reactions, canvases, lists, uploads and new conve
 A job that runs without you reads Slack through OpenCode's tools RPC. OpenCode holds the sign-in, and the plugin has no token to hand out, so never use a Slack token, `xoxp-`, or `slack.com/api`.
 
 ```sh
-# Once: a session whose agent the script runs as. Keep the `id` from its JSON output.
+# Once: a session whose agent the script runs as. It prints {"data":{"id":"ses_…",…}}: keep data.id.
 opencode api post /api/session -d '{"title":"incident log","agent":"build"}'
 # Each run: one method per read tool, with the tool's own input.
 opencode api post /api/rpc/slack.workspace.tools/slack_search_public \
