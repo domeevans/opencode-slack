@@ -60,7 +60,7 @@ See [Scripting](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/s
 
 ## Permissions
 
-**What runs without asking:** the known read tools: `slack_search_public`, `slack_search_channels`, `slack_search_users`, `slack_read_channel`, `slack_read_thread`, `slack_read_user_profile`, `slack_read_canvas`, `slack_list_channel_members`, `slack_get_reactions`, `slack_list_user_channels`, `slack_read_list` and `slack_search_emojis`.
+**What runs without asking:** the known read tools, such as `slack_search_public`, `slack_read_thread` and `slack_read_canvas`. [Tool classes](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#tool-classes) lists every tool.
 
 **What asks first:**
 
@@ -68,6 +68,8 @@ See [Scripting](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/s
 - file reads: `slack_read_file`;
 - writes: sending, drafting and scheduling messages, adding reactions, creating and updating canvases and lists, creating conversations, and file uploads;
 - any Slack tool the plugin does not know yet.
+
+The read tools read whatever your scopes reach. With the default scopes, that is public channels. If you add `groups:history`, `im:history` or `mpim:history`, `slack_read_channel` and `slack_read_thread` also read private channels and direct messages without asking; only the search across them asks. To make those reads ask too, add `{ "action": "slack_slack_read_channel", "resource": "*", "effect": "ask" }`, and the same for `slack_slack_read_thread` and `slack_slack_list_user_channels`.
 
 The plugin adds these defaults as rules right after each agent's base `allow` rule. OpenCode uses the last matching rule, so these all override the defaults:
 
@@ -93,30 +95,7 @@ The `slack_*` rule also matches tools of any other MCP server whose name starts 
 
 OpenCode creates some agents after the plugin adds its rules, so they get none: agents defined only in your config (`agents.<id>` entries that are not built-in agents, and Markdown agent files), and agents added by plugins that load after this one. These agents run Slack writes and unknown Slack tools **without asking**. Status names them in its `Agents without default rules` row and prints the rules to paste.
 
-**Fix:** put the plugin's default block in **that agent's own** `permissions`: the `slack_*` ask rule, then one allow rule per read tool. After the block, repeat any rules you already have for Slack tools in your top-level `permissions`, so they keep winning for that agent:
-
-```jsonc
-"agents": {
-  "reviewer": {
-    "permissions": [
-      { "action": "slack_*", "resource": "*", "effect": "ask" },
-      { "action": "slack_slack_search_public", "resource": "*", "effect": "allow" },
-      { "action": "slack_slack_search_channels", "resource": "*", "effect": "allow" },
-      { "action": "slack_slack_search_users", "resource": "*", "effect": "allow" },
-      { "action": "slack_slack_read_channel", "resource": "*", "effect": "allow" },
-      { "action": "slack_slack_read_thread", "resource": "*", "effect": "allow" },
-      { "action": "slack_slack_read_user_profile", "resource": "*", "effect": "allow" },
-      { "action": "slack_slack_read_canvas", "resource": "*", "effect": "allow" },
-      { "action": "slack_slack_list_channel_members", "resource": "*", "effect": "allow" },
-      { "action": "slack_slack_get_reactions", "resource": "*", "effect": "allow" },
-      { "action": "slack_slack_list_user_channels", "resource": "*", "effect": "allow" },
-      { "action": "slack_slack_read_list", "resource": "*", "effect": "allow" },
-      { "action": "slack_slack_search_emojis", "resource": "*", "effect": "allow" }
-      // then your top-level Slack rules again, if you have any
-    ]
-  }
-}
-```
+**Fix:** put the plugin's default block first in **that agent's own** `permissions` (in `opencode.json`, or the agent's Markdown file), followed by your top-level rules for Slack tools, so they keep winning for that agent. The block is the `slack_*` ask rule, then one allow rule per read tool, such as `{ "action": "slack_slack_search_public", "resource": "*", "effect": "allow" }`. `/slack-status` prints the exact block to paste; [The inserted rules](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#the-inserted-rules) lists it too.
 
 Do not put this block in the top-level `permissions`. OpenCode adds top-level rules to every agent after its built-in rules, so the block would loosen agents that deny Slack, such as Explore.
 

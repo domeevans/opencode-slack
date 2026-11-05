@@ -34,6 +34,12 @@ describe("the jelly declaration", () => {
     for (const tool of jelly.tools) expect(tool.name.replaceAll(".", "_"), tool.name).toBe(tool.permission)
   })
 
+  test("docs/jelly.md states the declared tool counts", () => {
+    const doc = readFileSync(new URL("../../docs/jelly.md", import.meta.url), "utf8")
+    const readOnly = jelly.tools.filter((tool) => tool.readOnly).length
+    expect(doc).toContain(`${jelly.tools.length} tools are declared (${readOnly} read-only)`)
+  })
+
   test("names every skill the package ships", () => {
     expect([...jelly.skills].sort()).toEqual(readdirSync(new URL("../../skills", import.meta.url)).sort())
   })

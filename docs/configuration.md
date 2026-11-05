@@ -169,7 +169,7 @@ The plugin defines no tools of its own. Besides the server and the `/connect` en
 
 ## Permissions
 
-The plugin adds `ask` rules to each agent through OpenCode's agent transform. Your `permissions` rules and saved "Always allow" approvals then override them. There is no allow-list option and no permission hook.
+The plugin adds one `ask` rule for every Slack tool and one `allow` rule per known read to each agent, through OpenCode's agent transform. Your `permissions` rules and saved "Always allow" approvals then override them. Its only permission hook is the tools RPC's, which refuses an ask on a script's own call (see [Scripting](scripting.md)).
 
 ### The inserted rules
 
@@ -299,6 +299,8 @@ Scopes per tool, from Slack's [MCP scope table](https://docs.slack.dev/ai/slack-
 | Creating and updating lists and their records (`slack_create_list`, `slack_update_list`, `slack_add_list_record`, `slack_update_list_record`) | `lists:read`, `lists:write` |
 | Creating conversations (`slack_create_conversation`) | `channels:write` (public channels), `groups:write` (private channels), `im:write` (direct messages), `mpim:write` (group direct messages) |
 | Uploading files (`slack_get_file_upload_url`, `slack_complete_file_upload`) | `files:write` |
+
+The read tools read whatever your scopes reach. With the default scopes, that is public channels. If you add `groups:history`, `im:history` or `mpim:history`, `slack_read_channel` and `slack_read_thread` also read private channels and direct messages without asking; only the search across them asks. To make those reads ask too, add `{ "action": "slack_slack_read_channel", "resource": "*", "effect": "ask" }`, and the same for `slack_slack_read_thread` and `slack_slack_list_user_channels`.
 
 To add scopes:
 

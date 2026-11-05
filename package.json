@@ -59,7 +59,7 @@
   },
   "jelly": {
     "title": "Slack",
-    "summary": "Search and read Slack; anything that sends asks first.",
+    "summary": "Search and read Slack; writes, private search and file reads ask first.",
     "icon": "assets/icon.svg",
     "tools": [
       {
