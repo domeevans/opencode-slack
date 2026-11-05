@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- The `slack-search` skill teaches what agents of 0.0.5 still got wrong:
+  - Every link that was not copied from a hit, a thread's own link included, is built in code, with a short example. Every claim carries its own link, even a repeated one.
+  - It says what `slack_read_thread` returns and how big it is, so agents read each thread once and whole.
+  - After a declined private search, it says that the default scopes would refuse that search anyway, and it points to `/slack-status`'s `Scopes` row.
+  - A script, and a test of one, uses a session created for it, never one found in history.
+  - Its link to the Scripting doc is the plain file on `raw.githubusercontent.com`.
 - Code Mode's description of the `slack` namespace says that a script calls the reads as a session created for it. The Scripting doc adds that a borrowed session runs the script as its own agent, under its rules.
 
 ## [0.0.5] - 2026-11-05
