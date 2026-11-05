@@ -347,6 +347,7 @@ Every error the plugin raises reads `CODE: What happened. Next step: What to do.
 | `AUTH_REQUIRED` | sign-in required | Run /connect and choose Slack, then press o or Enter to open the sign-in page (in a terminal, opencode mcp auth slack opens the browser automatically). |
 | `CONNECTION_FAILED` | failed | Fix the error shown, then reconnect slack in /mcps. |
 | none: connecting | connecting | Wait a few seconds, then run /slack-status again (or press r in /slack). |
+| none: OpenCode has not loaded the server | failed | Run opencode reload, then check again. |
 | `SERVER_DISABLED` | disabled | Enable slack in /mcps. |
 | `SERVER_NAME_IN_USE` | conflict | Remove mcp.servers.slack from your OpenCode config. |
 | `OPTIONS_INVALID` | not configured | See [Validation errors](#validation-errors). |
