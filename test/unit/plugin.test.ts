@@ -69,8 +69,10 @@ describe("setup with a client ID in the options", () => {
   test("describes the server's Code Mode namespace", async () => {
     expect([...(await setUp()).namespaces.values()]).toEqual([{ name: "slack", description: NAMESPACE_DESCRIPTION }])
     expect(NAMESPACE_DESCRIPTION).toContain("untrusted")
-    // The one plugin text the model always sees: the result shape, the scripts route and the skill.
-    for (const fact of ["Markdown", "opencode api post /api/rpc/slack.workspace.tools/", "never a Slack token", "slack-search"]) expect(NAMESPACE_DESCRIPTION).toContain(fact)
+    // The one plugin text the model always sees: the result shape, the scripts route, the script's own session (an
+    // agent that borrows one runs under that session's agent and rules) and the skill.
+    for (const fact of ["Markdown", "opencode api post /api/rpc/slack.workspace.tools/", "as a session created for them", "never a Slack token", "slack-search"])
+      expect(NAMESPACE_DESCRIPTION).toContain(fact)
     expect(NAMESPACE_DESCRIPTION.length).toBeLessThan(450)
   })
 

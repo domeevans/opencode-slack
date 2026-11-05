@@ -25,7 +25,7 @@ Every call names a session, and the session must name an agent. The script runs 
 - OpenCode then checks the call itself, as it does for the model: the agent's rules, the session's rules, then saved approvals.
 - No one answers a prompt for a script, so an `ask` is refused with `PERMISSION_DENIED` at once, and no prompt is left waiting. The plugin's default rules allow the twelve reads, so an agent with the default rules needs nothing more for them. The private search and the file read ask by default, so a script needs an allow rule for them.
 
-Create the session once, with the agent the script runs as, and keep its id:
+Create the session once, with the agent the script runs as, and keep its id. Use a session created for the script, also to test it: a session you borrow, such as one found in your session history, runs the script as its own agent, under its rules.
 
 ```sh
 opencode api post /api/session -d '{"title":"release digest","agent":"build"}'
