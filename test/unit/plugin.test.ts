@@ -66,9 +66,8 @@ describe("setup with a client ID in the options", () => {
     expect(await own.status()).toMatchObject({ shadowedSkills: [], nextStep: "Nothing to do." })
   })
 
-  test("describes the server's Code Mode namespace, under the configured server name", async () => {
+  test("describes the server's Code Mode namespace", async () => {
     expect([...(await setUp()).namespaces.values()]).toEqual([{ name: "slack", description: NAMESPACE_DESCRIPTION }])
-    expect([...(await setUp({ options: { oauth: { client_id: "C1" }, server: "work" } })).namespaces.keys()]).toEqual(["work"])
     expect(NAMESPACE_DESCRIPTION).toContain("untrusted")
     expect(NAMESPACE_DESCRIPTION.length).toBeLessThan(250)
   })
@@ -138,16 +137,8 @@ describe("setup with a client ID in the options", () => {
 
   test("inserts the default rules after the base allow of every agent that has one", async () => {
     const host = await setUp({ agents: [agent("build", BASE_RULES), agent("locked", [{ action: "*", resource: "*", effect: "deny" }])] })
-    expect(host.agents.find((item) => item.id === "build")?.permissions).toEqual([BASE_ALLOW, ...defaultRules("slack"), ...BASE_RULES.slice(1)])
+    expect(host.agents.find((item) => item.id === "build")?.permissions).toEqual([BASE_ALLOW, ...defaultRules(), ...BASE_RULES.slice(1)])
     expect(host.updatedAgents).toEqual(["build"])
-  })
-
-  test("a custom server name is used for the server, the rules and the status", async () => {
-    const host = await setUp({ options: { oauth: { client_id: "C1" }, server: "work-slack" }, status: { "work-slack": { status: "disabled" } } })
-    expect([...host.servers.keys()]).toEqual(["work-slack"])
-    expect(host.agents[0]?.permissions[1]).toEqual({ action: "work-slack_*", resource: "*", effect: "ask" })
-    expect(await host.status()).toMatchObject({ state: "disabled", server: { name: "work-slack" }, nextStep: "Enable work-slack in /mcps." })
-    await until(() => host.integrations.get("mcp_work-slack")?.name === "Slack (work-slack)")
   })
 
   test("a server the user already configured is kept, and status says the name is in use", async () => {
@@ -311,14 +302,6 @@ describe("setup without a client ID in the options", () => {
     host.emit("credential.switched")
     await Bun.sleep(20)
     expect(host.calls).not.toContain("mcp.reload")
-  })
-
-  test("a custom server name has its own Slack app entry", async () => {
-    const host = await setUp({ options: { server: "work" }, credentials: { "work-app": stored("C9") } })
-    expect(host.integrations.get("work-app")?.name).toBe("Slack app (work)")
-    expect(host.servers.get("work")).toMatchObject({ oauth: { client_id: "C9" } })
-    const status = await setUp({ options: { server: "other" } }).then((other) => other.status())
-    expect(status as object).toMatchObject({ nextStep: "Run /connect and choose Slack app (other), then paste your Slack app's client ID." })
   })
 })
 

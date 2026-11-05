@@ -11,7 +11,7 @@ A script can call Slack's read tools with no model: a cron job, a shell script, 
 | `slack_read_file` | `slack_slack_read_file` | ask: refused to scripts until an allow rule exists |
 | `describe` | none: lists the methods, their permission actions, whether OpenCode lists each tool now, and each tool's input as JSON Schema | |
 
-The tool names start with the server name, `slack` unless the plugin's `server` option sets another, so with `"server": "work"` the action is `work_slack_search_public`. The method names stay the same.
+Each method's permission action is the tool name with the server's prefix, `slack_`, for example `slack_slack_search_public`.
 
 Each method runs the tool with the same input: Slack's own tool, through OpenCode's own connection and sign-in. The plugin never sees the Slack token. Only these fourteen reads are methods. Slack's writes and sends (`slack_send_message`, `slack_send_message_draft`, `slack_schedule_message`, `slack_create_canvas`, `slack_update_canvas`, `slack_add_reaction`, `slack_get_file_upload_url`, `slack_complete_file_upload`, `slack_create_conversation`, `slack_create_list`, `slack_update_list`, `slack_add_list_record`, `slack_update_list_record`) and any tool Slack adds later are never methods, even with an allow rule.
 
@@ -84,7 +84,7 @@ A refusal or failure is the RPC error `failed`, with a message `CODE: what happe
 | `SESSION_UNKNOWN` | OpenCode says the session does not exist. Any other failure to look the session up is OpenCode's own error. |
 | `SESSION_AGENT_REQUIRED` | The session names no agent, or an agent that does not exist. |
 | `PERMISSION_DENIED` | The agent's or the session's rules deny the tool, or ask for an approval. The message names the action whose check was refused. For a deny, the next step names that action and the agent: remove or narrow the deny rule, add a later allow rule to the session, or use a session whose agent allows it. For an ask, it says to add an allow rule. |
-| `SERVER_CONFLICT` | Your OpenCode config defines its own server under the plugin's server name, which this plugin does not manage (`SERVER_NAME_IN_USE` in `/slack-status`). |
+| `SERVER_CONFLICT` | Your OpenCode config defines its own server named `slack`, which this plugin does not manage (`SERVER_NAME_IN_USE` in `/slack-status`). Remove `mcp.servers.slack` from your OpenCode config. |
 | `CLIENT_ID_MISSING`, `CLIENT_ID_INVALID` | No Slack app client ID is set, or the one saved in `/connect` is empty or has spaces, so the plugin added no Slack server. The next step is the one `/slack-status` gives: run `/connect`, choose **Slack app** and paste the client ID. A client ID saved in `/connect` applies to the next call. `describe` gives the same code as each method's `reason`. |
 | `AUTH_REQUIRED`, `CONNECTING`, `CONNECTION_FAILED`, `DISABLED`, `NOT_REGISTERED` | The Slack server needs a sign-in, is still connecting (also when it reconnected during the call), could not connect, is disabled, or is not registered although a client ID is set. `/slack-status` gives the details. |
 | `TOOL_UNAVAILABLE` | The server is connected, but OpenCode does not list the tool. |

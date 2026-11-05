@@ -36,7 +36,7 @@ describe("Slack's tools RPC", () => {
   })
 
   test("the private search and the file read ask under the default rules, so a script needs an allow rule for them", () => {
-    const rules: Rule[] = [{ action: "*", resource: "*", effect: "allow" }, ...defaultRules("slack")]
+    const rules: Rule[] = [{ action: "*", resource: "*", effect: "allow" }, ...defaultRules()]
     const effect = (tool: string) => rules.findLast((rule) => new RegExp(`^${rule.action.replaceAll("*", ".*")}$`).test(`slack_${tool}`))?.effect
     expect(KNOWN_READS.map((tool) => [tool, effect(tool)])).toEqual(KNOWN_READS.map((tool) => [tool, READS.includes(tool) ? "allow" : "ask"]))
   })
@@ -63,12 +63,12 @@ type Evaluation = { action: string; effect: string; message?: string; source?: {
  * Sets the plugin up on a fake host whose server lists every fake tool, each with an executor that checks the
  * agent's and the session's rules and runs the evaluate hooks, as OpenCode's does.
  */
-async function setUp(input: FakeHostInput & { readonly server?: string } = {}) {
-  const server = input.server ?? "slack"
+async function setUp(input: FakeHostInput = {}) {
+  const server = "slack"
   const executed: { tool: string; input: unknown }[] = []
   const sessions: Record<string, FakeSession> = { ses_build: { agent: "build" }, ...input.sessions }
   const host = fakeHost({
-    options: { oauth: { client_id: "C1" }, ...(input.server ? { server } : {}) },
+    options: { oauth: { client_id: "C1" } },
     status: { [server]: { status: "connected" } },
     ...input,
     sessions,
@@ -104,13 +104,6 @@ describe("the tools RPC in setup", () => {
     expect(host.executed).toEqual([{ tool: "slack_slack_read_channel", input: { channel_id: "C1" } }])
   })
 
-  test("uses the server option as the tools' prefix", async () => {
-    const host = await setUp({ server: "work" })
-    expect(await host.script("slack_search_public", "ses_build", { query: "q" })).toMatchObject({ output: { tool: "work_slack_search_public" } })
-    const described = (await host.script("describe", "")) as { methods: { name: string; action: string; available: boolean }[] }
-    expect(described.methods.map((method) => [method.name, method.action, method.available])).toEqual(KNOWN_READS.map((name) => [name, `work_${name}`, true]))
-  })
-
   test("refuses the private search and the file read under the default rules, at once, and runs them with an allow rule", async () => {
     const allow = (tool: string): Rule => ({ action: `slack_${tool}`, resource: "*", effect: "allow" })
     const host = await setUp({ sessions: { ses_allowed: { agent: "build", permissions: [allow("slack_search_public_and_private"), allow("slack_read_file")] } } })
@@ -132,6 +125,7 @@ describe("the tools RPC in setup", () => {
     const host = await setUp({ servers: { slack: { type: "remote", url: "https://mcp.example.invalid/mcp" } as never } })
     expect(await host.script("slack_search_public", "ses_build", { query: "q" })).toMatchObject({ error: "failed", data: { code: "SERVER_CONFLICT" } })
     expect(host.executed).toEqual([])
+    expect(NEXT_STEPS.SERVER_CONFLICT).toBe("Remove mcp.servers.slack from your OpenCode config.")
   })
 
   test("without a Slack app client ID, refuses with /slack-status's CLIENT_ID_MISSING and its next step, in calls and describe", async () => {
@@ -151,14 +145,6 @@ describe("the tools RPC in setup", () => {
     const status = (await host.status()) as { code: string; nextStep: string }
     expect(status.code).toBe("CLIENT_ID_INVALID")
     expect(await host.script("slack_search_public", "ses_build", { query: "q" })).toMatchObject({ error: "failed", data: { code: "CLIENT_ID_INVALID", next: status.nextStep } })
-  })
-
-  test("with a custom server name, the next step names that server's Slack app entry", async () => {
-    const host = await setUp({ options: { server: "work" }, tools: [] })
-    expect(await host.script("slack_search_public", "ses_build", { query: "q" })).toMatchObject({
-      error: "failed",
-      data: { code: "CLIENT_ID_MISSING", next: "Run /connect and choose Slack app (work), then paste your Slack app's client ID." },
-    })
   })
 
   test("is disposed with its hook by the plugin's cleanup", async () => {

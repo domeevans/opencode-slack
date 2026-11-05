@@ -100,7 +100,7 @@ function projectConfig(project: Project, plugin: string, callLog: string): objec
           custom: configOnly("Defined only in user config"),
           locked: configOnly("Denies everything", [deny("*")]),
           // The fix /slack-status gives for an agent defined only in user config.
-          fixed: configOnly("Has the default Slack rules", defaultRules("slack")),
+          fixed: configOnly("Has the default Slack rules", defaultRules()),
         },
       }
     case "rules":
@@ -111,7 +111,7 @@ function projectConfig(project: Project, plugin: string, callLog: string): objec
         agents: {
           custom: configOnly("Defined only in user config"),
           // The fix, followed by the user's own top-level Slack rules so they keep winning.
-          fixed: configOnly("Has the default Slack rules", [...defaultRules("slack"), allow("slack_slack_send_message"), deny("slack_slack_search_public")]),
+          fixed: configOnly("Has the default Slack rules", [...defaultRules(), allow("slack_slack_send_message"), deny("slack_slack_search_public")]),
         },
       }
     case "collision":

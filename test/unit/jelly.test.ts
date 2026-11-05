@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
-import { appDisplayName, appIntegrationID, resolveClient, serverDisplayName } from "../../src/connect.js"
-import { DEFAULT_SERVER } from "../../src/defaults.js"
+import { APP_NAME, resolveClient, SERVER_DISPLAY_NAME } from "../../src/connect.js"
+import { SERVER } from "../../src/defaults.js"
 import plugin from "../../src/index.js"
 import { parseOptions } from "../../src/options.js"
 import { defaultRules } from "../../src/permissions.js"
@@ -18,7 +18,7 @@ type Tool = { name: string; permission: string; effect: string; readOnly: boolea
 type SignIn = { id: string; label: string; integration?: string; server?: string; after?: string; presetBy?: string; help?: { url: string; label: string }; relay?: Record<string, string> }
 const manifest = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { files: string[]; jelly: { summary: string; icon: string; tools: Tool[]; skills: string[]; signIns: SignIn[] } }
 const jelly = manifest.jelly
-const rules: readonly { action: string; resource: string; effect: string }[] = [{ action: "*", resource: "*", effect: "allow" }, ...defaultRules("slack")]
+const rules: readonly { action: string; resource: string; effect: string }[] = [{ action: "*", resource: "*", effect: "allow" }, ...defaultRules()]
 const wildcard = (pattern: string) => new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replaceAll("*", ".*")}$`)
 const effectOf = (action: string) => [...rules].reverse().find((rule) => wildcard(rule.action).test(action) && rule.resource === "*")?.effect
 
@@ -70,8 +70,8 @@ describe("the jelly declaration", () => {
 
     test("declare the Slack app's /connect entry, then the server that waits for it, under the names /connect shows", () => {
       expect(jelly.signIns.length).toBe(2)
-      expect(app).toMatchObject({ id: "app", label: appDisplayName(DEFAULT_SERVER), integration: appIntegrationID(DEFAULT_SERVER) })
-      expect(slack).toEqual({ id: "slack", label: serverDisplayName(DEFAULT_SERVER), server: DEFAULT_SERVER, after: "app", relay: {} })
+      expect(app).toMatchObject({ id: "app", label: APP_NAME, integration: "slack-app" })
+      expect(slack).toEqual({ id: "slack", label: SERVER_DISPLAY_NAME, server: SERVER, after: "app", relay: {} })
     })
 
     test("Slack's own sign-in may come back through Jelly's relay; the docs give its address, and the default manifest trusts only the loopback", () => {

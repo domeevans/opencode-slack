@@ -1,5 +1,5 @@
 import type { Plugin } from "@opencode/plugin"
-import { SLACK_MCP_URL } from "./defaults.js"
+import { SERVER, SLACK_MCP_URL } from "./defaults.js"
 import type { Client } from "./connect.js"
 import type { Options } from "./options.js"
 
@@ -32,7 +32,7 @@ export function serverConfig(options: Options, client: Client): ServerConfig {
  * taken, for example by the user's own config.
  */
 export function registerServer(editor: McpEditor, options: Options, client: Client | undefined): boolean {
-  if (editor.get(options.server) !== undefined) return false
-  if (client !== undefined) editor.set(options.server, serverConfig(options, client))
+  if (editor.get(SERVER) !== undefined) return false
+  if (client !== undefined) editor.set(SERVER, serverConfig(options, client))
   return true
 }

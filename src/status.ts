@@ -1,5 +1,5 @@
-import { appDisplayName, serverDisplayName, type ClientState } from "./connect.js"
-import { APP_MANIFEST_URL, DEFAULT_SERVER, SLACK_MCP_URL, SUPPORTED_HOST_RANGE } from "./defaults.js"
+import { APP_NAME, SERVER_DISPLAY_NAME, type ClientState } from "./connect.js"
+import { APP_MANIFEST_URL, SERVER, SLACK_MCP_URL, SUPPORTED_HOST_RANGE } from "./defaults.js"
 import type { ParsedOptions } from "./options.js"
 import { defaultRules, type Rule } from "./permissions.js"
 import type { ListedSkill } from "./skills.js"
@@ -106,7 +106,7 @@ function effect(rules: readonly Rule[], action: string): Rule["effect"] {
 }
 
 /** An action no Slack tool can have: OpenCode limits tool names to letters, digits, `_` and `-`. */
-const unknownAction = (server: string) => `${server}_.`
+const UNKNOWN_ACTION = `${SERVER}_.`
 
 const NOTHING_TO_DO = "Nothing to do."
 const LISTED_UNKNOWN = 20
@@ -136,7 +136,7 @@ const quote = (rule: Rule) => `{ "action": "${rule.action}", "resource": "${rule
 const AGENT_FIX = "Put the default rules shown by /slack-status first in each listed agent's own permissions, in opencode.json or the agent's Markdown file, followed by your top-level rules for Slack tools."
 
 /** The block to paste, as a JSON list with one rule per line. */
-const remedy = (server: string) => `[\n${defaultRules(server).map((rule) => `  ${quote(rule)}`).join(",\n")}\n]`
+const REMEDY = `[\n${defaultRules().map((rule) => `  ${quote(rule)}`).join(",\n")}\n]`
 
 /** The next step once connected: unguarded agents first, because they run Slack writes without asking. */
 function connectedNextStep(unguarded: readonly string[], shadowed: readonly ListedSkill[]): string {
@@ -146,26 +146,26 @@ function connectedNextStep(unguarded: readonly string[], shadowed: readonly List
   return NOTHING_TO_DO
 }
 
-function connection(server: string, status: ServerStatus | undefined, unguarded: readonly string[], shadowed: readonly ListedSkill[], toolCount: number) {
+function connection(status: ServerStatus | undefined, unguarded: readonly string[], shadowed: readonly ListedSkill[], toolCount: number) {
   if (status === undefined) {
-    return { state: "failed" as const, message: `The ${server} server is not registered.`, nextStep: "Run opencode reload, then check again." }
+    return { state: "failed" as const, message: `The ${SERVER} server is not registered.`, nextStep: "Run opencode reload, then check again." }
   }
   switch (status.status) {
     case "pending":
       return { state: "connecting" as const, message: "Connecting to Slack.", nextStep: "Wait a few seconds, then run /slack-status again (or press r in /slack)." }
     case "disabled":
-      return { state: "disabled" as const, code: "SERVER_DISABLED" as const, message: `The ${server} server is disabled.`, nextStep: `Enable ${server} in /mcps.` }
+      return { state: "disabled" as const, code: "SERVER_DISABLED" as const, message: `The ${SERVER} server is disabled.`, nextStep: `Enable ${SERVER} in /mcps.` }
     case "needs_auth":
       // The host's text for a needed sign-in can carry an authorization URL, so it is never shown.
       return {
         state: "sign_in_required" as const, code: "AUTH_REQUIRED" as const, message: "Sign in to Slack to use it in OpenCode.",
-        nextStep: `Run /connect and choose ${serverDisplayName(server)}, then press o or Enter to open the sign-in page (in a terminal, opencode mcp auth ${server} opens the browser automatically).`,
+        nextStep: `Run /connect and choose ${SERVER_DISPLAY_NAME}, then press o or Enter to open the sign-in page (in a terminal, opencode mcp auth ${SERVER} opens the browser automatically).`,
       }
     case "failed": {
       const detail = shortReason(status.error)
       return {
         state: "failed" as const, code: "CONNECTION_FAILED" as const, message: "Could not connect to Slack.", ...(detail === undefined ? {} : { detail }),
-        nextStep: `Fix the error shown, then reconnect ${server} in /mcps.`,
+        nextStep: `Fix the error shown, then reconnect ${SERVER} in /mcps.`,
       }
     }
     case "connected":
@@ -178,9 +178,8 @@ function connection(server: string, status: ServerStatus | undefined, unguarded:
 
 export function buildStatus(input: StatusInput): Status {
   const options = input.parsed.ok ? input.parsed.options : undefined
-  const server = options?.server ?? DEFAULT_SERVER
   const host = { version: input.hostVersion === "" ? null : input.hostVersion, range: SUPPORTED_HOST_RANGE, tested: input.hostTested }
-  const names = input.tools.filter((tool) => tool.options?.namespace === server).map((tool) => tool.name)
+  const names = input.tools.filter((tool) => tool.options?.namespace === SERVER).map((tool) => tool.name)
   const unknown = names.filter((name) => classify(name) === "unknown").sort()
   const tools = {
     read: names.filter((name) => classify(name) === "read").length,
@@ -191,12 +190,12 @@ export function buildStatus(input: StatusInput): Status {
     unknownNames: unknown.filter((name) => SAFE_NAME.test(name)).slice(0, LISTED_UNKNOWN),
   }
   const unguardedAgents = input.active
-    ? input.agents.filter((agent) => effect(agent.permissions, unknownAction(server)) === "allow").map((agent) => agent.id)
+    ? input.agents.filter((agent) => effect(agent.permissions, UNKNOWN_ACTION) === "allow").map((agent) => agent.id)
     : []
   const client = input.client.client
   const base = {
     version: input.version,
-    server: { name: server, url: SLACK_MCP_URL },
+    server: { name: SERVER, url: SLACK_MCP_URL },
     ...(options === undefined || !input.active ? {} : {
       ...(client === undefined ? {} : {
         client: { id: client.id, mode: client.secret === undefined ? "public_pkce" as const : "confidential" as const, source: client.source },
@@ -226,28 +225,27 @@ export function buildStatus(input: StatusInput): Status {
   if (input.nameInUse) {
     return {
       ...base, state: "conflict", code: "SERVER_NAME_IN_USE",
-      message: `Another MCP server is already named "${server}", so Slack was not added.`,
-      nextStep: `Remove mcp.servers.${server} from your OpenCode config, or set this plugin's "server" option to another name.`,
+      message: `Another MCP server is already named "${SERVER}", so Slack was not added.`,
+      nextStep: `Remove mcp.servers.${SERVER} from your OpenCode config.`,
     }
   }
   if (client === undefined) {
-    const app = appDisplayName(server)
     return {
       ...base,
       state: "not_configured",
       ...(input.client.invalid
-        ? { code: "CLIENT_ID_INVALID" as const, message: `The client ID saved in the /connect ${app} entry is empty or has spaces, so Slack is not added.` }
+        ? { code: "CLIENT_ID_INVALID" as const, message: `The client ID saved in the /connect ${APP_NAME} entry is empty or has spaces, so Slack is not added.` }
         : { code: "CLIENT_ID_MISSING" as const, message: `No Slack app client ID is set, so Slack is not added. To create the app, use the manifest at ${APP_MANIFEST_URL}.` }),
-      nextStep: clientNextStep(server),
+      nextStep: clientNextStep(),
     }
   }
-  const status = input.servers.find((item) => item.name === server)?.status
-  return { ...base, ...connection(server, status, unguardedAgents, input.shadowedSkills, names.length) }
+  const status = input.servers.find((item) => item.name === SERVER)?.status
+  return { ...base, ...connection(status, unguardedAgents, input.shadowedSkills, names.length) }
 }
 
 /** The next step while no usable Slack app client ID is set: status's, and the tools RPC's for CLIENT_ID_MISSING. */
-export function clientNextStep(server: string): string {
-  return `Run /connect and choose ${appDisplayName(server)}, then paste your Slack app's client ID.`
+export function clientNextStep(): string {
+  return `Run /connect and choose ${APP_NAME}, then paste your Slack app's client ID.`
 }
 
 /** The callback to register, and for an `https:` one where its proxy forwards it: OpenCode's listener, same path. */
@@ -314,7 +312,7 @@ export function statusRows(status: Status): { readonly label: string; readonly v
   })
   rows.push({
     label: "Agents without default rules",
-    value: status.unguardedAgents.length === 0 ? "none" : `${status.unguardedAgents.join(", ")}\n${remedy(status.server.name)}`,
+    value: status.unguardedAgents.length === 0 ? "none" : `${status.unguardedAgents.join(", ")}\n${REMEDY}`,
   })
   rows.push(
     { label: "OpenCode", value: `${status.host.version ?? "unknown version"} (${status.host.tested ? "tested" : "untested"}; supported range ${status.host.range})` },

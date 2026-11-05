@@ -12,7 +12,7 @@ const C1: ClientState = { client: { id: "C1", source: "options" }, invalid: fals
 const CONFIDENTIAL: ClientState = { client: { id: "C1", secret: SECRET, source: "connect" }, invalid: false }
 const INVALID = parseOptions({ oauth: { redirect_port: 8765 } })
 
-const guarded = (server = "slack"): Rule[] => [BASE_ALLOW, ...defaultRules(server), ...BASE_RULES.slice(1)]
+const guarded = (): Rule[] => [BASE_ALLOW, ...defaultRules(), ...BASE_RULES.slice(1)]
 const deny = (action: string): Rule => ({ action, resource: "*", effect: "deny" })
 const allow = (action: string): Rule => ({ action, resource: "*", effect: "allow" })
 
@@ -74,7 +74,7 @@ const STATES: readonly (readonly [string, StatusInput, Pick<Status, "state" | "c
     state: "conflict",
     code: "SERVER_NAME_IN_USE",
     message: 'Another MCP server is already named "slack", so Slack was not added.',
-    nextStep: 'Remove mcp.servers.slack from your OpenCode config, or set this plugin\'s "server" option to another name.',
+    nextStep: "Remove mcp.servers.slack from your OpenCode config.",
   }],
   ["a server the host does not list", input({ servers: [] }), {
     state: "failed",
@@ -184,18 +184,6 @@ describe("buildStatus states", () => {
     expect(shortReason("ECONNREFUSED: Unable to connect.")).toBe("ECONNREFUSED: Unable to connect")
     expect(Object.keys(buildStatus(input({ servers: [{ name: "slack", status: { status: "failed", error: "" } }] })))).not.toContain("detail")
   })
-
-  test("the connection is read from the configured server name", () => {
-    const parsed = parseOptions({ oauth: { client_id: "C1" }, server: "work-slack" })
-    const status = buildStatus(input({
-      parsed,
-      servers: [{ name: "slack", status: { status: "connected" } }, { name: "work-slack", status: { status: "disabled" } }],
-      agents: [{ id: "build", permissions: guarded("work-slack") }],
-    }))
-    expect(status.server).toEqual({ name: "work-slack", url: "https://mcp.slack.com/mcp" })
-    expect(status.state).toBe("disabled")
-    expect(status.nextStep).toBe("Enable work-slack in /mcps.")
-  })
 })
 
 describe("buildStatus details", () => {
@@ -293,17 +281,11 @@ describe("unguarded agents", () => {
     { id: "custom", permissions: [...BASE_RULES] },
     { id: "loose", permissions: [...guarded(), allow("slack_*")] },
     { id: "reopened", permissions: [...guarded(), BASE_ALLOW] },
-    { id: "fixed", permissions: [...BASE_RULES, deny("slack_slack_search_public"), ...defaultRules("slack"), deny("slack_slack_search_public")] },
+    { id: "fixed", permissions: [...BASE_RULES, deny("slack_slack_search_public"), ...defaultRules(), deny("slack_slack_search_public")] },
   ]
 
   test("names agents that would run an unknown Slack tool without asking", () => {
     expect(buildStatus(input({ agents })).unguardedAgents).toEqual(["custom", "loose", "reopened"])
-  })
-
-  test("checks against the configured server name", () => {
-    const parsed = parseOptions({ oauth: { client_id: "C1" }, server: "work-slack" })
-    const status = buildStatus(input({ parsed, servers: [{ name: "work-slack", status: { status: "connected" } }], agents }))
-    expect(status.unguardedAgents).toEqual(["build", "custom", "loose", "reopened", "fixed"])
   })
 
   test("is empty when the plugin registered nothing", () => {
@@ -319,13 +301,13 @@ describe("unguarded agents", () => {
     const row = statusRows(buildStatus(input({ agents }))).find((item) => item.label === "Agents without default rules")
     const [names, ...block] = (row?.value ?? "").split("\n")
     expect(names).toBe("custom, loose, reopened")
-    expect(JSON.parse(block.join("\n"))).toEqual(defaultRules("slack"))
+    expect(JSON.parse(block.join("\n"))).toEqual(defaultRules())
     expect(block.slice(1, -1).every((line) => line.startsWith('  { "action": '))).toBe(true)
   })
 
   test("following the fix guards the agent", () => {
     // The user's own top-level rule for a Slack tool, then the plugin's block, then that rule repeated, as the fix says.
-    const fixed = [...BASE_RULES, deny("slack_slack_search_public"), ...defaultRules("slack"), deny("slack_slack_search_public")]
+    const fixed = [...BASE_RULES, deny("slack_slack_search_public"), ...defaultRules(), deny("slack_slack_search_public")]
     expect(buildStatus(input({ agents: [{ id: "custom", permissions: fixed }] })).unguardedAgents).toEqual([])
   })
 
@@ -415,11 +397,6 @@ describe("formatStatus", () => {
 
   test("a confidential client from /connect says a secret is set and where it was saved", () => {
     expect(formatStatus(buildStatus(input({ client: CONFIDENTIAL })))).toContain("Client: C1 (confidential, secret set; saved in /connect)")
-  })
-
-  test("the allow example uses the configured server name", () => {
-    const parsed = parseOptions({ oauth: { client_id: "C1" }, server: "work-slack" })
-    expect(formatStatus(buildStatus(input({ parsed })))).toContain('{ "action": "work-slack_slack_read_file", "resource": "*", "effect": "allow" }')
   })
 })
 

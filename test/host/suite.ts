@@ -116,8 +116,8 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         for (const agent of agents) {
           const at = agent.permissions.findIndex(isBaseAllow)
           if (at === -1 || CONFIG_ONLY.includes(agent.id)) continue
-          expect({ agent: agent.id, rules: agent.permissions.slice(at + 1, at + 1 + defaultRules("slack").length) })
-            .toEqual({ agent: agent.id, rules: defaultRules("slack") })
+          expect({ agent: agent.id, rules: agent.permissions.slice(at + 1, at + 1 + defaultRules().length) })
+            .toEqual({ agent: agent.id, rules: defaultRules() })
         }
         for (const id of CONFIG_ONLY) expect({ id, catchAlls: catchAlls(agents.find((agent) => agent.id === id)!.permissions) }).toEqual({ id, catchAlls: id === "fixed" ? 1 : 0 })
       })

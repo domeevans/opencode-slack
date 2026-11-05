@@ -122,7 +122,7 @@ Do not put this block in the top-level `permissions`. OpenCode adds top-level ru
 
 ## Configure
 
-Everything works without options. Options set the client ID for everyone (instead of `/connect`), the callback URL and its local port, the scopes, a client secret for apps without PKCE, the server name and the host check. To pass them, use the object form of the `plugins` entry:
+Everything works without options. Options set the client ID for everyone (instead of `/connect`), the callback URL and its local port, the scopes, a client secret for apps without PKCE, and the host check. To pass them, use the object form of the `plugins` entry:
 
 ```jsonc
 {
@@ -174,7 +174,7 @@ Run `/slack-status` (or `/slack` in the TUI) first. Its `Connection` row shows a
 | `connecting` | none | OpenCode is connecting to Slack. | Wait a few seconds, then run `/slack-status` again (or press `r` in `/slack`). |
 | `disabled` | `SERVER_DISABLED` | The server is turned off. | Turn on `slack` in `/mcps`. |
 | `failed` | `CONNECTION_FAILED` | The connection failed. Status shows OpenCode's reason, shortened to one line. | Fix the error shown, then reconnect `slack` in `/mcps`. |
-| `conflict` | `SERVER_NAME_IN_USE` | Another MCP server already uses the name `slack`. | Remove `mcp.servers.slack` from your config, or set the `server` option to another name. |
+| `conflict` | `SERVER_NAME_IN_USE` | Another MCP server already uses the name `slack`. | Remove `mcp.servers.slack` from your OpenCode config. |
 | `failed` | none | OpenCode has not loaded the server. | Run `opencode reload`, then check again. |
 | `not configured` | `OPTIONS_INVALID` | An option is invalid. Status names the field. | Follow the next step. |
 | `host untested` | `HOST_UNTESTED` | This OpenCode version is outside the supported range `>=2.2.3 <2.3.0`, so Slack is not set up. A release inside the range that is not 2.2.3, 2.2.4 or 2.2.5 runs normally; the `OpenCode` row calls it untested. | Use OpenCode `>=2.2.3 <2.3.0`, or set `"allowUntestedHost": true` in the plugin's options. |

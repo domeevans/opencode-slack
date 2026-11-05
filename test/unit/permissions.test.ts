@@ -9,7 +9,7 @@ const deny = (action: string): Rule => ({ action, resource: "*", effect: "deny" 
 
 describe("defaultRules", () => {
   test("asks before every tool on the server, then allows each known read", () => {
-    expect(defaultRules("slack")).toEqual([
+    expect(defaultRules()).toEqual([
       ask("slack_*"),
       allow("slack_slack_search_public"),
       allow("slack_slack_search_channels"),
@@ -26,29 +26,29 @@ describe("defaultRules", () => {
     ])
   })
 
-  test("uses the configured server name as the tool prefix", () => {
-    expect(defaultRules("work-slack")).toEqual([ask("work-slack_*"), ...READ_TOOLS.map((tool) => allow(`work-slack_${tool}`))])
+  test("allows exactly the read tools", () => {
+    expect(defaultRules().slice(1)).toEqual(READ_TOOLS.map((tool) => allow(`slack_${tool}`)))
   })
 })
 
 describe("insertDefaultRules", () => {
   test("puts the block directly after the base allow, before the .env rules", () => {
     const build = agent("build", BASE_RULES)
-    insertDefaultRules(agentEditor([build]).editor, "slack")
-    expect(build.permissions).toEqual([BASE_ALLOW, ...defaultRules("slack"), ...BASE_RULES.slice(1)])
+    insertDefaultRules(agentEditor([build]).editor)
+    expect(build.permissions).toEqual([BASE_ALLOW, ...defaultRules(), ...BASE_RULES.slice(1)])
   })
 
   test("keeps the agent's own later rules after the block, so they still win", () => {
     const explore = agent("explore", [...BASE_RULES, deny("*"), allow("read"), allow("grep")])
-    insertDefaultRules(agentEditor([explore]).editor, "slack")
-    expect(explore.permissions.slice(0, 1 + defaultRules("slack").length)).toEqual([BASE_ALLOW, ...defaultRules("slack")])
-    expect(explore.permissions.slice(1 + defaultRules("slack").length)).toEqual([...BASE_RULES.slice(1), deny("*"), allow("read"), allow("grep")])
+    insertDefaultRules(agentEditor([explore]).editor)
+    expect(explore.permissions.slice(0, 1 + defaultRules().length)).toEqual([BASE_ALLOW, ...defaultRules()])
+    expect(explore.permissions.slice(1 + defaultRules().length)).toEqual([...BASE_RULES.slice(1), deny("*"), allow("read"), allow("grep")])
   })
 
   test("uses only the first base allow", () => {
     const twice = agent("twice", [BASE_ALLOW, ask("bash"), BASE_ALLOW])
-    insertDefaultRules(agentEditor([twice]).editor, "slack")
-    expect(twice.permissions).toEqual([BASE_ALLOW, ...defaultRules("slack"), ask("bash"), BASE_ALLOW])
+    insertDefaultRules(agentEditor([twice]).editor)
+    expect(twice.permissions).toEqual([BASE_ALLOW, ...defaultRules(), ask("bash"), BASE_ALLOW])
   })
 
   test.each([
@@ -60,7 +60,7 @@ describe("insertDefaultRules", () => {
   ])("leaves an agent with %s untouched", (_label, permissions: Rule[]) => {
     const strict = agent("strict", permissions)
     const { editor, updated } = agentEditor([strict])
-    insertDefaultRules(editor, "slack")
+    insertDefaultRules(editor)
     expect(updated).toEqual([])
     expect(strict.permissions).toEqual(permissions)
   })
@@ -68,17 +68,17 @@ describe("insertDefaultRules", () => {
   test("updates every agent with a base allow and only those", () => {
     const agents = [agent("build", BASE_RULES), agent("locked", [deny("*")]), agent("plan", [...BASE_RULES, deny("edit")])]
     const { editor, updated } = agentEditor(agents)
-    insertDefaultRules(editor, "slack")
+    insertDefaultRules(editor)
     expect(updated).toEqual(["build", "plan"])
   })
 
   test("replaying the transform leaves agents unchanged", () => {
     const agents = [agent("build", BASE_RULES), agent("explore", [...BASE_RULES, deny("*")])]
     const { editor, updated } = agentEditor(agents)
-    insertDefaultRules(editor, "slack")
+    insertDefaultRules(editor)
     const once = structuredClone(agents)
-    insertDefaultRules(editor, "slack")
-    insertDefaultRules(editor, "slack")
+    insertDefaultRules(editor)
+    insertDefaultRules(editor)
     expect(agents).toEqual(once)
     expect(updated).toEqual(["build", "explore"])
   })
@@ -86,26 +86,17 @@ describe("insertDefaultRules", () => {
   test("replaying after another plugin inserted its block at the same place adds nothing", () => {
     const build = agent("build", BASE_RULES)
     const { editor } = agentEditor([build])
-    insertDefaultRules(editor, "slack")
+    insertDefaultRules(editor)
     build.permissions.splice(1, 0, ask("linear_*"), allow("linear_get_issue"))
     const before = structuredClone(build.permissions)
-    insertDefaultRules(editor, "slack")
+    insertDefaultRules(editor)
     expect(build.permissions).toEqual(before)
   })
 
   test("a rebuilt agent gets the block exactly once", () => {
-    insertDefaultRules(agentEditor([agent("build", BASE_RULES)]).editor, "slack")
+    insertDefaultRules(agentEditor([agent("build", BASE_RULES)]).editor)
     const rebuilt = agent("build", BASE_RULES)
-    insertDefaultRules(agentEditor([rebuilt]).editor, "slack")
+    insertDefaultRules(agentEditor([rebuilt]).editor)
     expect(rebuilt.permissions.filter((rule) => rule.action === "slack_*")).toHaveLength(1)
-  })
-
-  test("a custom server name prefixes every rule, and replays once", () => {
-    const build = agent("build", BASE_RULES)
-    const { editor } = agentEditor([build])
-    insertDefaultRules(editor, "work-slack")
-    insertDefaultRules(editor, "work-slack")
-    expect(build.permissions).toEqual([BASE_ALLOW, ...defaultRules("work-slack"), ...BASE_RULES.slice(1)])
-    expect(build.permissions.filter((rule) => rule.action.startsWith("slack_"))).toEqual([])
   })
 })

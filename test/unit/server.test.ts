@@ -85,22 +85,10 @@ describe("registerServer", () => {
     expect(servers.size).toBe(0)
   })
 
-  test("adds the server under a custom name", () => {
-    const { editor, servers } = mcpEditor()
-    expect(registerServer(editor, options({ server: "work-slack" }), C1)).toBe(true)
-    expect([...servers.keys()]).toEqual(["work-slack"])
-  })
-
   test("never overwrites a server the user already named the same", () => {
     const mine = { type: "remote", url: "https://mcp.example.test/mcp", oauth: false } as const
     const { editor, servers } = mcpEditor({ slack: mine })
     expect(registerServer(editor, PUBLIC, C1)).toBe(false)
     expect(servers.get("slack")).toStrictEqual(mine)
-  })
-
-  test("a collision on one name leaves other names free", () => {
-    const { editor, servers } = mcpEditor({ slack: { type: "local", command: ["true"] } })
-    expect(registerServer(editor, options({ server: "slack-org" }), C1)).toBe(true)
-    expect([...servers.keys()].sort()).toEqual(["slack", "slack-org"])
   })
 })

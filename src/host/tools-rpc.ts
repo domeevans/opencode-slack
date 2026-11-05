@@ -51,11 +51,11 @@ export const NEXT_STEPS: NextSteps = {
   SESSION_UNKNOWN: `Create a session that names an agent, such as POST /api/session with {"agent":"build"}, and pass its id.`,
   SESSION_AGENT_REQUIRED: `Create a session that names an agent, such as POST /api/session with {"agent":"build"}, and pass its id.`,
   PERMISSION_DENIED: "Add an allow rule for the tool to the session's agent or to the session, or use a session whose agent allows it.",
-  SERVER_CONFLICT: `Remove your own server with this plugin's server name from your OpenCode config, or set this plugin's "server" option to another name.`,
+  SERVER_CONFLICT: "Remove mcp.servers.slack from your OpenCode config.",
   AUTH_REQUIRED: "Run /slack-status and follow its next step to sign in to Slack.",
   CONNECTING: "Wait a few seconds, then call the method again.",
   CONNECTION_FAILED: "Run /slack-status and follow its next step.",
-  DISABLED: "Enable the Slack server in /mcps, then call the method again.",
+  DISABLED: "Enable slack in /mcps, then call the method again.",
   // Without a client ID, setup's notRegistered hook gives CLIENT_ID_MISSING or CLIENT_ID_INVALID and /connect instead.
   NOT_REGISTERED: "Run /slack-status and follow its next step.",
   TOOL_UNAVAILABLE: "Call describe to see which methods OpenCode lists now, and run /slack-status.",

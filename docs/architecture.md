@@ -31,7 +31,7 @@ The plugin is configuration and status code around Slack's hosted MCP server. Op
 1. Setup parses the options and checks the host version. On invalid options, or a host outside the supported range, it registers only the status surfaces.
 2. Without `oauth.client_id`, it adds **Slack app** to `/connect` and reads the stored client from OpenCode's credential store.
 3. The MCP transform registers `https://mcp.slack.com/mcp` with that client, or nothing when there is none. A tool transform gives the server's Code Mode namespace its description (`NAMESPACE_DESCRIPTION` in `tools.ts`).
-4. When the plugin is set up, the tools RPC registers after the status RPC, with the server name from the options. It is a conflict while `nameInUse` is set.
+4. When the plugin is set up, the tools RPC registers after the status RPC, for the server `slack`. It is a conflict while `nameInUse` is set.
 5. A background listener handles `credential.updated` and `credential.switched` (the client changed: `ctx.mcp.reload()`) and `integration.updated` (OpenCode re-registered the server's integration: rename it **Slack** again). Setup's cleanup stops it.
 
 The plugin defines no tools, makes no network requests and never reads Slack tokens.
@@ -43,10 +43,10 @@ The plugin defines no tools, makes no network requests and never reads Slack tok
 A call is `{ sessionID, input }`. The module:
 
 1. looks up the session with `ctx.session.get`, and its agent's rules with `ctx.agent.get` in the session's location (`SESSION_UNKNOWN`, `SESSION_AGENT_REQUIRED`);
-2. refuses the tool when the last rule that matches `<server>_<tool>` on `*`, in the agent's rules followed by the session's, is a deny: OpenCode hides such a tool from the model (`PERMISSION_DENIED`);
+2. refuses the tool when the last rule that matches `slack_<tool>` on `*`, in the agent's rules followed by the session's, is a deny: OpenCode hides such a tool from the model (`PERMISSION_DENIED`);
 3. refuses with `SERVER_CONFLICT` while the user's own server holds the name;
 4. finds the tool's executor in `ctx.tool.list()`, or names the server's connection state (`AUTH_REQUIRED` and so on) or `TOOL_UNAVAILABLE`;
-5. calls `execute(input, { sessionID, agent, messageID, id, signal, progress })` with a new call id. OpenCode's executor checks `<server>_<tool>` on `*` itself, with the agent's rules, the session's rules and saved approvals, and sends OpenCode's own credential;
+5. calls `execute(input, { sessionID, agent, messageID, id, signal, progress })` with a new call id. OpenCode's executor checks `slack_<tool>` on `*` itself, with the agent's rules, the session's rules and saved approvals, and sends OpenCode's own credential;
 6. returns `{ output?, text }`: the tool's structured content and its text parts.
 
 While a call runs, its id is live. A `permission.hook("evaluate")` turns an `ask` whose source id is live into a deny, so the script gets `PERMISSION_DENIED` at once and no prompt waits; this is how the private search and the file read are refused without an allow rule. It changes nothing else; it is the plugin's only permission hook, and the forbidden-API scan allows exactly this one.
