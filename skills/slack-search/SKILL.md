@@ -36,9 +36,10 @@ Find, then read, then cite. The tools are Slack's own, in Code Mode's `slack` na
 
 A hit is a fragment, so read around it before you answer:
 
-- `slack_read_thread({ channel_id, message_ts })` returns the parent message and every reply.
-  - `message_ts` must be the parent's ts. A hit with `Reply count` above 0 is a parent: use its own `Message_ts`.
-  - For a reply, use the `thread_ts=` value in the reply's permalink.
+- `slack_read_thread({ channel_id, message_ts })` returns the parent message and every reply, up to 100 per call.
+  - `message_ts` must be the parent's ts. A hit with `Reply count` above 0 is a parent: use its own `Message_ts`. For a reply, use the `thread_ts=` value in the reply's permalink.
+  - **What comes back:** `{ messages, pagination_info }`, both strings, about 0.4 KB per message (a 30-reply thread is about 13 KB). `messages` holds `=== THREAD PARENT MESSAGE ===`, then `=== THREAD REPLIES (N total) ===` and one `--- Reply i of N ---` block per reply. Each message has `From`, `Time` and `Message TS` lines (with a space, unlike a hit's `Message_ts`), then its text. There are no permalinks. `pagination_info` holds the next `cursor` for a thread with more than 100 replies.
+  - **Read each thread once, whole.** Choose the threads first from the hits' `Reply count` and `Text`. Don't cut `messages` to a fixed length or screen threads by their first characters, because then you read them again. To return less, split on the `--- Reply` lines and keep the replies you need.
 - `slack_read_channel({ channel_id, oldest, latest, limit })` returns recent messages, or the messages around a hit. Search lags behind very new messages, so read the channel for those.
 - `slack_read_user_profile({ user_id })`, `slack_list_channel_members({ channel_id })`, `slack_get_reactions({ channel_id, message_ts })` and `slack_read_list({ list_id })` cover the rest.
 - Timestamps such as `"1730000000.000100"` are strings: pass them unchanged.
@@ -47,15 +48,22 @@ A hit is a fragment, so read around it before you answer:
 
 - **Private search asks first:** `slack_search_public_and_private` makes OpenCode ask the user before it runs. Use it only for private content the user asked about, and tell them first that OpenCode will ask.
 - **Some reads don't ask, so you must:** `slack_read_channel` with a user ID or a `D…` ID, and `slack_list_user_channels` with `types` that include `im` or `mpim`, read the same private content without a prompt. Ask the user yourself before you use them that way.
-- **The default scopes refuse private search:** Slack answers `missing_scope` even after the user approves.
-  - Say that DMs and private channels were not searched.
-  - Point to the `Scopes` row of `/slack-status`; the missing scopes are `search:read.private`, `search:read.im` and `search:read.mpim`.
-- **A decline is final:** don't retry, and don't reach the same content another way. Continue with public results, and say what was not searched.
+- **The default scopes refuse private search:** Slack answers `missing_scope` even after the user approves. Say that DMs and private channels were not searched, and point to the `Scopes` row of `/slack-status`; the missing scopes are `search:read.private`, `search:read.im` and `search:read.mpim`.
+- **A decline is final:** don't retry, and don't reach the same content another way. Continue with public results, and say what was not searched. If you tell the user how to run it later, add that the default scopes would refuse it anyway, and point to the `Scopes` row of `/slack-status`.
 
 ## 3. Answer and cite
 
-- **Cite every claim:** put the permalink of the message it rests on, from that hit's `Permalink` line, next to the claim. Copy it exactly (in Code Mode, return it from the code): a retyped link breaks silently.
-- **Replies from a thread:** `slack_read_thread` gives no permalinks. Cite the thread's permalink from the hit, or build a reply's link in code, never by hand: `https://<workspace>.slack.com/archives/<channel ID>/p<ts without the dot>?thread_ts=<parent ts, with its dot>`. Take the workspace host from any permalink.
+- **Cite every claim:** put the link of the message it rests on next to each claim, each bullet of a list of people or decisions included. Repeat the link even if it appeared above; "same thread as above" is not a citation.
+- **Copy a link or build it in code, never type one:** a retyped link breaks silently.
+  - A hit's `Permalink` line: copy it exactly (in Code Mode, return it from the code).
+  - Any other link, a thread's own link included: build it in your `execute` code from the `Message_ts` or `Message TS` values, and return it beside the fact it supports. Take the workspace host from any permalink.
+  - So return a ready link with every message your code reads. If the answer needs a link your code did not return, run code again to build it rather than writing it yourself.
+  - Paste each link whole. The usual slip is dropping the dot from `thread_ts=` (`thread_ts=1730000000.000100`, never `thread_ts=1730000000000100`): Slack's own links always keep it. Check every `thread_ts=` before you answer.
+    ```js
+    const host = permalink.match(/^https:\/\/[^/]+/)[0]
+    const link = (channel, ts, parentTs) => `${host}/archives/${channel}/p${ts.replace(".", "")}`
+      + (parentTs && parentTs !== ts ? `?thread_ts=${parentTs}` : "")  // a reply needs its parent's ts, with the dot
+    ```
 - **Say what you searched:** the queries, the channels and the dates.
 - **Never claim completeness:** results are ranked and capped, new messages may be missing, and you see only what the user can see. Write "I found no messages that match …", not "there are none".
 
@@ -84,7 +92,8 @@ opencode api post /api/rpc/slack.workspace.tools/slack_search_public \
 - **`describe`** (`-d '{"input":{}}'`) lists the methods.
 - **Errors:** `opencode api` exits with status 1 on an RPC error, after it prints the error JSON. Check the status before you use the output.
 - **Permissions:** the script runs under the session agent's rules, and an ask is refused. So `slack_search_public_and_private` and `slack_read_file` need an allow rule. Writes are never methods.
-- **Details:** https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/scripting.md
+- **Its own session, also for a test:** your chat session names no agent, so the RPC refuses it. Create a session for the script as above, and tell the user. Never borrow a session found in history or a session list: the script would run as that session's agent, under its rules.
+- **Details:** https://raw.githubusercontent.com/joe-broadhead/opencode-slack/HEAD/docs/scripting.md
 
 ## When something fails
 
