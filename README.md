@@ -41,6 +41,7 @@ The Slack tools are Slack's own. With Code Mode, which is on by default, agents 
 - `Account`: Slack shows the account on its sign-in page; OpenCode does not store it;
 - `Access`: what runs without asking, what asks first, and how to allow it;
 - `Server`, `Client`, `Callback` and `Scopes`: the Slack server, the client ID and where it came from, the callback URL to register, and the requested scopes;
+- `Skills`, only when needed: a skill of yours with the id `slack-search`, which OpenCode loads instead of the plugin's;
 - `Tools`: the Slack tools found, counted by class, with any unknown tools named;
 - `Agents without default rules`: agents that run Slack tools without asking, with the rules to paste (see [Agents without the default rules](#agents-without-the-default-rules)), or `none`;
 - `OpenCode`: the version, whether it is tested (2.2.3, 2.2.4 and 2.2.5), and the supported range;
@@ -177,6 +178,7 @@ Run `/slack-status` (or `/slack` in the TUI) first. Its `Connection` row shows a
 | `failed` | none | OpenCode has not loaded the server. | Run `opencode reload`, then check again. |
 | `not configured` | `OPTIONS_INVALID` | An option is invalid. Status names the field. | Follow the next step. |
 | `host untested` | `HOST_UNTESTED` | This OpenCode version is outside the supported range `>=2.2.3 <2.3.0`, so Slack is not set up. A release inside the range that is not 2.2.3, 2.2.4 or 2.2.5 runs normally; the `OpenCode` row calls it untested. | Use OpenCode `>=2.2.3 <2.3.0`, or set `"allowUntestedHost": true` in the plugin's options. |
+| `connected` | none | A skill in your own or the project's skill folders has the id `slack-search`, so OpenCode loads it instead of the plugin's. The `Skills` row names its file. | Move or rename that skill, then run `opencode reload`. |
 | `connected` | none | Ready. The next step reads `Nothing to do.` | If status names agents without default rules, put the default rules first in their own permissions (see above). |
 
 If status itself cannot be read, `/slack-status` says `STATUS_UNAVAILABLE`; run it again in a moment.

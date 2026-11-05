@@ -29,6 +29,7 @@ function input(overrides: Partial<StatusInput> = {}): StatusInput {
     servers: [{ name: "slack", status: { status: "connected" } }],
     tools: [],
     agents: [{ id: "build", permissions: guarded() }],
+    shadowedSkills: [],
     ...overrides,
   }
 }
@@ -340,6 +341,27 @@ describe("unguarded agents", () => {
   })
 })
 
+describe("a shadowed skill", () => {
+  const shadowed = [{ id: "slack-search", path: "/home/u/.config/opencode/skills/slack-search/SKILL.md" }]
+  const MOVE = "Move or rename the skill at /home/u/.config/opencode/skills/slack-search/SKILL.md, so that this plugin's slack-search skill loads, then run opencode reload."
+
+  test("connected: the Skills row names the file, and the next step moves it", () => {
+    const status = buildStatus(input({ shadowedSkills: shadowed }))
+    expect(status).toMatchObject({ state: "connected", shadowedSkills: shadowed, nextStep: MOVE })
+    expect(statusRows(status).find((row) => row.label === "Skills")?.value)
+      .toBe("slack-search is shadowed by /home/u/.config/opencode/skills/slack-search/SKILL.md, so agents load that file instead of this plugin's skill")
+  })
+
+  test("unguarded agents come first, and a connection problem before both", () => {
+    expect(buildStatus(input({ shadowedSkills: shadowed, agents: [{ id: "custom", permissions: [...BASE_RULES] }] })).nextStep).toBe(AGENT_FIX)
+    expect(buildStatus(input({ shadowedSkills: shadowed, servers: [] })).nextStep).toBe("Run opencode reload, then check again.")
+  })
+
+  test("no Skills row when nothing is shadowed", () => {
+    expect(statusRows(buildStatus(input())).map((row) => row.label)).not.toContain("Skills")
+  })
+})
+
 describe("stateLabel", () => {
   test.each([
     ["no sign-in", "sign-in required"],
@@ -382,7 +404,7 @@ describe("formatStatus", () => {
     expect(lines[0]).toBe("Slack")
     expect(lines[1]).toBe(`Connection: ${stateLabel(status)}. ${status.code === undefined ? "" : `${status.code}: `}${status.message}${status.detail === undefined ? "" : ` ${status.detail}`}`)
     const labels = lines.slice(1).map((line) => line.slice(0, line.indexOf(":")))
-    const order = ["Connection", "Account", "Access", "Server", "Client", "Callback", "Scopes", "Tools", "Agents without default rules", "OpenCode", "Next step"]
+    const order = ["Connection", "Account", "Access", "Server", "Client", "Callback", "Scopes", "Skills", "Tools", "Agents without default rules", "OpenCode", "Next step"]
     expect(labels).toEqual(order.filter((label) => labels.includes(label)))
     // The shared rows are always there, with "none" where there is nothing to show.
     for (const label of ["Connection", "Account", "Access", "Tools", "Agents without default rules", "OpenCode", "Next step"]) expect(labels).toContain(label)

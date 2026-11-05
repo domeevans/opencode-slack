@@ -9,7 +9,7 @@ import type { Status } from "../../src/status.js"
 import { KNOWN_READS, TOOLS_RPC_ID } from "../../src/host/tools-rpc.js"
 import { classify } from "../../src/tools.js"
 import { fakeInput, FAKE_TOOLS, UPSTREAM_FAILURE } from "./fake-slack-mcp.js"
-import { CLIENT_ID, HOSTED_OAUTH, REPO, repositoryChanges, TEMP, USER_SERVER, type Host, type Project } from "./harness.js"
+import { CLIENT_ID, HOSTED_OAUTH, REPO, repositoryChanges, SHADOWING_SKILL, TEMP, USER_SERVER, type Host, type Project } from "./harness.js"
 import type { Outcome } from "./probe/index.js"
 
 interface ProbeState {
@@ -90,6 +90,8 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
           version: PACKAGE_VERSION,
           host: { version: host.version, range: ">=2.2.3 <2.3.0", tested: true },
           client: { id: CLIENT_ID, mode: "public_pkce" },
+          // OpenCode lists the bundled skill under the path the plugin gave, so it is not reported as shadowed.
+          shadowedSkills: [],
         })
         expect(Object.hasOwn(current, "code")).toBe(false)
       })
@@ -325,6 +327,18 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         // The host fills in defaults such as an empty timeout; the user's URL and OAuth setting are untouched.
         expect((await probe("collision")).registered).toMatchObject(USER_SERVER)
         expect(await slashStatus("collision")).toStartWith("Slack\nConnection: conflict. SERVER_NAME_IN_USE: ")
+      })
+    })
+
+    describe("a project skill with the bundled skill's id", () => {
+      test("wins in OpenCode, and status names its file", async () => {
+        const path = join(host.root, SHADOWING_SKILL)
+        // Status waits for the project to load; the skill list does not.
+        await status("shadowed")
+        const listed = (await host.client.skill.list(at("shadowed"))).data.filter((skill) => skill.id === "slack-search")
+        expect(listed.map((skill) => skill.path)).toEqual([path])
+        expect(await status("shadowed")).toMatchObject({ shadowedSkills: [{ id: "slack-search", path }] })
+        expect(await slashStatus("shadowed")).toContain(`Skills: slack-search is shadowed by ${path}, `)
       })
     })
 

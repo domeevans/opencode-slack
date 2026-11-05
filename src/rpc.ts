@@ -26,7 +26,8 @@ const status = object({
   }, ["read", "private", "file", "write", "unknown", "unknownNames"]),
   unguardedAgents: texts,
   host: object({ version: { type: ["string", "null"] }, range: text, tested: { type: "boolean" } }, ["version", "range", "tested"]),
-}, ["version", "state", "message", "nextStep", "server", "asksBefore", "tools", "unguardedAgents", "host"])
+  shadowedSkills: { type: "array", items: object({ id: text, path: text }, ["id", "path"]) },
+}, ["version", "state", "message", "nextStep", "server", "asksBefore", "tools", "unguardedAgents", "host", "shadowedSkills"])
 
 /** The status contract shared by the server, the TUI view and other clients. */
 export const SlackRpc = Rpc.define({

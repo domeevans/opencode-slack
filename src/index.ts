@@ -7,7 +7,7 @@ import { insertDefaultRules } from "./permissions.js"
 import { SlackRpc } from "./rpc.js"
 import { registerServer } from "./server.js"
 import { NAMESPACE_DESCRIPTION } from "./tools.js"
-import { loadSkills } from "./skills.js"
+import { loadSkills, shadowedSkills, type ListedSkill } from "./skills.js"
 import { buildStatus, clientNextStep, formatStatus, UNAVAILABLE } from "./status.js"
 import { VERSION } from "./version.js"
 
@@ -52,6 +52,7 @@ export default Plugin.define({
     const stopped = new AbortController()
     let nameInUse = false
     let client: ClientState = { invalid: false }
+    let bundled: readonly ListedSkill[] = []
     let cleanup = async () => {}
 
     if (options !== undefined) {
@@ -65,6 +66,7 @@ export default Plugin.define({
       await ctx.tool.transform((editor) => editor.namespace({ name: options.server, description: NAMESPACE_DESCRIPTION }))
       await ctx.agent.transform((editor) => insertDefaultRules(editor, options.server))
       const skills = await loadSkills()
+      bundled = skills
       await ctx.skill.transform((editor) => {
         for (const skill of skills) editor.add(skill)
       })
@@ -119,6 +121,8 @@ export default Plugin.define({
       servers: (await ctx.mcp.list()).data,
       tools: await ctx.tool.list(),
       agents: (await ctx.agent.list()).data,
+      // A skill list the host cannot give reports nothing shadowed, rather than failing status.
+      shadowedSkills: bundled.length === 0 ? [] : shadowedSkills(await ctx.skill.list().then((listed) => listed.data, () => []), bundled),
     })
 
     await ctx.rpc.register(SlackRpc, {

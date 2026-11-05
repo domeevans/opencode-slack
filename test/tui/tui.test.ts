@@ -38,6 +38,7 @@ function status(overrides: Partial<StatusInput> = {}): Status {
     servers: [{ name: "slack", status: { status: "connected" } }],
     tools: [],
     agents: [],
+    shadowedSkills: [],
     ...overrides,
   })
 }

@@ -31,7 +31,7 @@ export type UsedContext = {
   readonly permission: Pick<Context["permission"], "hook">
   readonly command: Pick<Context["command"], "transform">
   readonly session: Pick<Context["session"], "synthetic" | "get">
-  readonly skill: Pick<Context["skill"], "transform">
+  readonly skill: Pick<Context["skill"], "transform" | "list">
   readonly location: Pick<Context["location"], "directory">
 }
 
@@ -114,6 +114,8 @@ export interface FakeHostInput {
   readonly credentials?: Readonly<Record<string, CredentialValue>>
   /** Sessions by ID, for the tools RPC. */
   readonly sessions?: Readonly<Record<string, FakeSession>>
+  /** Skills from the user's or the project's skill folders. One with a registered skill's id wins, as in OpenCode. */
+  readonly userSkills?: readonly { readonly id: string; readonly path: string }[]
 }
 
 /** An event stream that delivers what `push` sends and ends when its signal aborts. */
@@ -289,6 +291,12 @@ export function fakeHost(input: FakeHostInput = {}) {
         callback({ add: (skill: SkillInfo) => void skills.push(skill) } as unknown as SkillEditor)
         return registration
       },
+      list: (async () => {
+        if (failLists) throw new Error("host unavailable")
+        const users = input.userSkills ?? []
+        const data = [...users, ...skills.filter((skill) => !users.some((user) => user.id === skill.id))]
+        return { location: { directory: FAKE_LOCATION }, data }
+      }) as never,
     },
     location: { directory: FAKE_LOCATION as Context["location"]["directory"] },
   }

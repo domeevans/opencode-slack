@@ -330,10 +330,11 @@ Approving a write tool in OpenCode does not grant its Slack scope. Without the s
 | `tools` | Counts of `read`, `private`, `file`, `write` and `unknown` tools on the server, and `unknownNames`: at most 20 of the unknown tools' names, only those made of lowercase letters, digits and `_` |
 | `unguardedAgents` | Agents that would run an unknown Slack tool without asking; empty when there are none. An agent whose own rules already ask or deny for every Slack tool is not listed. |
 | `host` | `version` (`null` if OpenCode reports none), `range` (the supported range) and `tested` (true only for 2.2.3, 2.2.4 and 2.2.5) |
+| `shadowedSkills` | Skills with a bundled skill's id, `slack-search`, that OpenCode loads instead of the bundled one, each as `id` and `path`: for example a skill in your own or the project's skill folders. Empty when there are none. |
 
 Scripts have a second RPC, `slack.workspace.tools`, which calls Slack's read tools with no model. It has its own error codes; see [Scripting](scripting.md).
 
-The text surfaces show the rows `Connection`, `Account`, `Access`, `Server`, `Client`, `Callback`, `Scopes`, `Tools`, `Agents without default rules`, `OpenCode` and `Next step`, in that order. `Client`, `Callback` and `Scopes` appear when they apply; every other row is always there, with `none` when no agent lacks the default rules. The RPC has one error, `unavailable`. OpenCode does not record which Slack account signed in, and the plugin never reads tokens, so status has no account field. Slack shows the workspace and account on its sign-in page.
+The text surfaces show the rows `Connection`, `Account`, `Access`, `Server`, `Client`, `Callback`, `Scopes`, `Skills`, `Tools`, `Agents without default rules`, `OpenCode` and `Next step`, in that order. `Client`, `Callback`, `Scopes` and `Skills` appear when they apply; every other row is always there, with `none` when no agent lacks the default rules. The RPC has one error, `unavailable`. OpenCode does not record which Slack account signed in, and the plugin never reads tokens, so status has no account field. Slack shows the workspace and account on its sign-in page.
 
 ## Errors
 
@@ -351,5 +352,7 @@ Every error the plugin raises reads `CODE: What happened. Next step: What to do.
 | `SERVER_NAME_IN_USE` | conflict | Remove mcp.servers.slack from your OpenCode config, or set this plugin's "server" option to another name. |
 | `OPTIONS_INVALID` | not configured | See [Validation errors](#validation-errors). |
 | `HOST_UNTESTED` | host untested | Use OpenCode >=2.2.3 <2.3.0, or set "allowUntestedHost": true in this plugin's options to run anyway. |
+| none: a shadowed skill | connected | Move or rename the skill at `<path>`, so that this plugin's slack-search skill loads, then run opencode reload. |
+| none: agents without default rules | connected | Put the default rules shown by /slack-status first in each listed agent's own permissions, in opencode.json or the agent's Markdown file, followed by your top-level rules for Slack tools. |
 | `STATUS_UNAVAILABLE` | none: status itself failed | Run /slack-status again in a moment (in the dialog: press r to retry). |
 | `SKILLS_INVALID` | none: the plugin does not load | Reinstall the plugin. A bundled skill is missing or has invalid frontmatter. |

@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
-import { loadSkills, parseSkill } from "../../src/skills.js"
+import { loadSkills, parseSkill, shadowedSkills } from "../../src/skills.js"
 
 const REPO = fileURLToPath(new URL("../..", import.meta.url))
 const SEARCH = readFileSync(join(REPO, "skills", "slack-search", "SKILL.md"), "utf8")
@@ -93,5 +93,19 @@ describe("loadSkills", () => {
     await expect(loadSkills(folder({ "slack-search": "# no frontmatter\n" }))).rejects.toThrow(
       "SKILLS_INVALID: Bundled skill slack-search has invalid frontmatter. Next step: Reinstall the plugin.",
     )
+  })
+})
+
+describe("shadowedSkills", () => {
+  const own = [{ id: "slack-search", path: "/pkg/skills/slack-search/SKILL.md" }]
+
+  test("names a listed skill with a bundled id but another file", () => {
+    const user = { id: "slack-search", path: "/home/u/.config/opencode/skills/slack-search/SKILL.md" }
+    expect(shadowedSkills([user, { id: "other", path: "/x" }], own)).toEqual([user])
+  })
+
+  test("is empty when OpenCode lists the bundled file, or another skill id", () => {
+    expect(shadowedSkills([...own, { id: "other", path: "/x" }], own)).toEqual([])
+    expect(shadowedSkills([], own)).toEqual([])
   })
 })

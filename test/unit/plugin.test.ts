@@ -53,6 +53,19 @@ describe("setup with a client ID in the options", () => {
     expect(host.skills.map((skill) => skill.id)).toEqual(["slack-search"] as never)
   })
 
+  test("status names a user skill with the bundled skill's id, which OpenCode loads instead, and says to move it", async () => {
+    const path = "/home/someone/.config/opencode/skills/slack-search/SKILL.md"
+    const host = await setUp({ status: { slack: { status: "connected" } }, userSkills: [{ id: "slack-search", path }] })
+    expect(await host.status()).toMatchObject({
+      state: "connected",
+      shadowedSkills: [{ id: "slack-search", path }],
+      nextStep: `Move or rename the skill at ${path}, so that this plugin's slack-search skill loads, then run opencode reload.`,
+    })
+    expect((await host.slashStatus()).text).toContain(`Skills: slack-search is shadowed by ${path}, so agents load that file instead of this plugin's skill`)
+    const own = await setUp({ status: { slack: { status: "connected" } } })
+    expect(await own.status()).toMatchObject({ shadowedSkills: [], nextStep: "Nothing to do." })
+  })
+
   test("describes the server's Code Mode namespace, under the configured server name", async () => {
     expect([...(await setUp()).namespaces.values()]).toEqual([{ name: "slack", description: NAMESPACE_DESCRIPTION }])
     expect([...(await setUp({ options: { oauth: { client_id: "C1" }, server: "work" } })).namespaces.keys()]).toEqual(["work"])

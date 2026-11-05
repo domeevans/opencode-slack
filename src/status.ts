@@ -2,6 +2,7 @@ import { appDisplayName, serverDisplayName, type ClientState } from "./connect.j
 import { APP_MANIFEST_URL, DEFAULT_SERVER, SLACK_MCP_URL, SUPPORTED_HOST_RANGE } from "./defaults.js"
 import type { ParsedOptions } from "./options.js"
 import { defaultRules, type Rule } from "./permissions.js"
+import type { ListedSkill } from "./skills.js"
 import { classify } from "./tools.js"
 
 /** The shared status labels in machine form; `/slack-status` shows them as `sign-in required` and so on. */
@@ -57,6 +58,8 @@ export interface Status {
   readonly unguardedAgents: readonly string[]
   /** `range` is the supported range; `tested` is true only for a release every check runs on. */
   readonly host: { readonly version: string | null; readonly range: string; readonly tested: boolean }
+  /** User or project skills with a bundled skill's id, which OpenCode loads instead of the bundled one. */
+  readonly shadowedSkills: readonly ListedSkill[]
 }
 
 export type ServerStatus =
@@ -78,6 +81,7 @@ export interface StatusInput {
   readonly servers: readonly { readonly name: string; readonly status: ServerStatus }[]
   readonly tools: readonly { readonly name: string; readonly options?: { readonly namespace?: string } }[]
   readonly agents: readonly { readonly id: string; readonly permissions: readonly Rule[] }[]
+  readonly shadowedSkills: readonly ListedSkill[]
 }
 
 /** What `/slack-status` and the RPC error say when the host cannot answer. */
@@ -134,7 +138,15 @@ const AGENT_FIX = "Put the default rules shown by /slack-status first in each li
 /** The block to paste, as a JSON list with one rule per line. */
 const remedy = (server: string) => `[\n${defaultRules(server).map((rule) => `  ${quote(rule)}`).join(",\n")}\n]`
 
-function connection(server: string, status: ServerStatus | undefined, unguarded: readonly string[], toolCount: number) {
+/** The next step once connected: unguarded agents first, because they run Slack writes without asking. */
+function connectedNextStep(unguarded: readonly string[], shadowed: readonly ListedSkill[]): string {
+  if (unguarded.length > 0) return AGENT_FIX
+  const [skill] = shadowed
+  if (skill !== undefined) return `Move or rename the skill at ${skill.path}, so that this plugin's ${skill.id} skill loads, then run opencode reload.`
+  return NOTHING_TO_DO
+}
+
+function connection(server: string, status: ServerStatus | undefined, unguarded: readonly string[], shadowed: readonly ListedSkill[], toolCount: number) {
   if (status === undefined) {
     return { state: "failed" as const, message: `The ${server} server is not registered.`, nextStep: "Run opencode reload, then check again." }
   }
@@ -159,7 +171,7 @@ function connection(server: string, status: ServerStatus | undefined, unguarded:
     case "connected":
       return {
         state: "connected" as const, message: `Connected. Slack tools available: ${toolCount}.`,
-        nextStep: unguarded.length > 0 ? AGENT_FIX : NOTHING_TO_DO,
+        nextStep: connectedNextStep(unguarded, shadowed),
       }
   }
 }
@@ -197,6 +209,7 @@ export function buildStatus(input: StatusInput): Status {
     tools,
     unguardedAgents,
     host,
+    shadowedSkills: input.active ? input.shadowedSkills.map((skill) => ({ id: skill.id, path: skill.path })) : [],
   }
   // Invalid options come first: they need fixing on any host, and an untested host may already be allowed.
   if (!input.parsed.ok) {
@@ -229,7 +242,7 @@ export function buildStatus(input: StatusInput): Status {
     }
   }
   const status = input.servers.find((item) => item.name === server)?.status
-  return { ...base, ...connection(server, status, unguardedAgents, names.length) }
+  return { ...base, ...connection(server, status, unguardedAgents, input.shadowedSkills, names.length) }
 }
 
 /** The next step while no usable Slack app client ID is set: status's, and the tools RPC's for CLIENT_ID_MISSING. */
@@ -289,6 +302,12 @@ export function statusRows(status: Status): { readonly label: string; readonly v
   }
   if (status.callback !== undefined) rows.push({ label: "Callback", value: callbackRow(status.callback, status.callbackPort) })
   if (status.scopes !== undefined) rows.push({ label: "Scopes", value: status.scopes.join(" ") })
+  if (status.shadowedSkills.length > 0) {
+    rows.push({
+      label: "Skills",
+      value: status.shadowedSkills.map((skill) => `${skill.id} is shadowed by ${skill.path}, so agents load that file instead of this plugin's skill`).join("; "),
+    })
+  }
   rows.push({
     label: "Tools",
     value: `${tools.read} read, ${tools.private} private search, ${tools.file} file, ${tools.write} write${unknownTools(tools)}`,
