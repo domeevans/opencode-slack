@@ -9,7 +9,7 @@ import { createInterface } from "node:readline"
 import { SLACK_SCHEMAS } from "./slack-catalog.js"
 
 /** A tool Slack does not list, so the plugin does not know it. */
-export const UNKNOWN_TOOL = "slack_brand_new_tool"
+const UNKNOWN_TOOL = "slack_brand_new_tool"
 
 export const FAKE_TOOLS = [...Object.keys(SLACK_SCHEMAS), UNKNOWN_TOOL]
 

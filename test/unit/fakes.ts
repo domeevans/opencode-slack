@@ -5,8 +5,8 @@ import type { Rule } from "../../src/permissions.js"
 import type { ServerStatus } from "../../src/status.js"
 
 type Context = Plugin.Context
-export type McpEditor = Parameters<Parameters<Context["mcp"]["transform"]>[0]>[0]
-export type AgentEditor = Parameters<Parameters<Context["agent"]["transform"]>[0]>[0]
+type McpEditor = Parameters<Parameters<Context["mcp"]["transform"]>[0]>[0]
+type AgentEditor = Parameters<Parameters<Context["agent"]["transform"]>[0]>[0]
 type IntegrationEditor = Parameters<Parameters<Context["integration"]["transform"]>[0]>[0]
 type MethodRegistration = Parameters<IntegrationEditor["method"]["update"]>[0]
 type CredentialValue = NonNullable<Awaited<ReturnType<Context["integration"]["connection"]["resolve"]>>>
@@ -19,7 +19,7 @@ type ToolEditor = Parameters<Parameters<Context["tool"]["transform"]>[0]>[0]
 type Namespace = Parameters<ToolEditor["namespace"]>[0]
 
 /** The members of `Plugin.Context` that `setup` uses. */
-export type UsedContext = {
+type UsedContext = {
   readonly app: Pick<Context["app"], "version">
   readonly options: Context["options"]
   readonly mcp: Pick<Context["mcp"], "transform" | "list" | "reload">
@@ -45,7 +45,7 @@ export const BASE_RULES: readonly Rule[] = [
   { action: "read", resource: "*.env.example", effect: "allow" },
 ]
 
-export interface FakeAgent {
+interface FakeAgent {
   readonly id: string
   permissions: Rule[]
 }
@@ -101,7 +101,7 @@ export interface FakeSession {
 }
 
 /** The directory of the fake host's location. */
-export const FAKE_LOCATION = "/tmp/slack-fake-location"
+const FAKE_LOCATION = "/tmp/slack-fake-location"
 
 export interface FakeHostInput {
   readonly version?: string

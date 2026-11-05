@@ -6,7 +6,7 @@ import type { ListedSkill } from "./skills.js"
 import { classify } from "./tools.js"
 
 /** The shared status labels in machine form; `/slack-status` shows them as `sign-in required` and so on. */
-export type State =
+type State =
   | "connected"
   | "sign_in_required"
   | "connecting"
@@ -16,7 +16,7 @@ export type State =
   | "conflict"
   | "host_untested"
 
-export type ErrorCode =
+type ErrorCode =
   | "OPTIONS_INVALID"
   | "SERVER_NAME_IN_USE"
   | "HOST_UNTESTED"
