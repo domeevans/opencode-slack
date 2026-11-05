@@ -69,9 +69,7 @@ export function parseOptions(input: unknown): ParsedOptions {
   if (!isRecord(oauth)) return fail("oauth", "Must be an object.", "Set oauth to an object such as { \"client_id\": \"...\" }.")
   const unknownOAuthKey = Object.keys(oauth).find((key) => !OAUTH_KEYS.includes(key))
   if (unknownOAuthKey !== undefined) {
-    return fail(`oauth.${unknownOAuthKey}`, "This option is not supported.", unknownOAuthKey === "redirect_port"
-      ? `Use oauth.redirect_uri instead, for example ${DEFAULT_REDIRECT_URI}.`
-      : `Remove it. Supported oauth options: ${OAUTH_KEYS.join(", ")}.`)
+    return fail(`oauth.${unknownOAuthKey}`, "This option is not supported.", `Remove it. Supported oauth options: ${OAUTH_KEYS.join(", ")}.`)
   }
 
   const clientId = oauth.client_id

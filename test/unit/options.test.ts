@@ -105,20 +105,15 @@ describe("parseOptions rejects", () => {
     expect(rejected({ oauth })).toMatchObject({ field: "oauth", message: "Must be an object." })
   })
 
-  test("redirect_port, pointing to oauth.redirect_uri instead of accepting it as an alias", () => {
-    expect(rejected(withOAuth({ redirect_port: 8765 }))).toEqual({
-      code: "OPTIONS_INVALID",
-      field: "oauth.redirect_port",
-      message: "This option is not supported.",
-      next: `Use oauth.redirect_uri instead, for example ${DEFAULT_REDIRECT_URI}.`,
-    })
-  })
-
-  test("other unknown oauth keys, naming the supported ones", () => {
+  test("unknown oauth keys, redirect_port included, naming the supported ones", () => {
     expect(rejected(withOAuth({ clientId: "x" }))).toEqual({
       code: "OPTIONS_INVALID",
       field: "oauth.clientId",
       message: "This option is not supported.",
+      next: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
+    })
+    expect(rejected(withOAuth({ redirect_port: 8765 }))).toMatchObject({
+      field: "oauth.redirect_port",
       next: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
     })
   })

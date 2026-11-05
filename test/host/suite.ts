@@ -347,8 +347,8 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         expect(await status("invalid")).toMatchObject({
           state: "not_configured",
           code: "OPTIONS_INVALID",
-          message: "Option oauth.redirect_port: This option is not supported.",
-          nextStep: "Use oauth.redirect_uri instead, for example http://localhost:8765/callback.",
+          message: "Option oauth.bogus: This option is not supported.",
+          nextStep: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
         })
         const plugins = (await host.client.plugin.list(at("invalid"))).data
         expect(plugins.find((plugin) => plugin.id === "slack.workspace")?.state).toEqual({ status: "active" })

@@ -317,7 +317,7 @@ describe("setup that registers only the status surfaces", () => {
   })
 
   test.each([
-    ["an unknown option", { oauth: { client_id: "C1", redirect_port: 8765 } }, "oauth.redirect_port"],
+    ["an unknown option", { oauth: { client_id: "C1", bogus: 1 } }, "oauth.bogus"],
     ["a secret without a client ID", { oauth: { client_secret: "s" } }, "oauth.client_secret"],
     ["a bad server name", { oauth: { client_id: "C1" }, server: "a.b" }, "server"],
     ["options that are not an object", "slack", "options"],
@@ -339,12 +339,12 @@ describe("setup that registers only the status surfaces", () => {
   })
 
   test("an untested host with allowUntestedHost and invalid options reports the invalid option", async () => {
-    const host = await setUp({ version: "2.3.0", options: { oauth: { redirect_port: 1 }, allowUntestedHost: true } })
+    const host = await setUp({ version: "2.3.0", options: { oauth: { bogus: 1 }, allowUntestedHost: true } })
     expect(host.calls).toEqual(STATUS_ONLY)
     expect(await host.status()).toMatchObject({
       state: "not_configured",
       code: "OPTIONS_INVALID",
-      message: "Option oauth.redirect_port: This option is not supported.",
+      message: "Option oauth.bogus: This option is not supported.",
       host: { version: "2.3.0", tested: false },
     })
     const text = (await host.slashStatus()).text

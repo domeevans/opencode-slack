@@ -80,7 +80,7 @@ The checks run in this order, and status reports only the first problem:
 | `options` | Plugin options must be an object. | Set options to an object, or remove them. |
 | any other top-level key | This option is not supported. | Remove it. Supported options: oauth, allowUntestedHost. |
 | `oauth` | Must be an object. | Set oauth to an object such as `{ "client_id": "..." }`. |
-| any other `oauth` key | This option is not supported. | Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret. For `redirect_port`, the next step is instead: Use oauth.redirect_uri instead, for example `http://localhost:8765/callback`. |
+| any other `oauth` key | This option is not supported. | Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret. |
 | `oauth.client_id` | Must be a non-empty string without spaces. | Copy the client ID from the Basic Information page of your Slack app. |
 | `oauth.redirect_uri` | Must be a string. / Must be a valid URL. / Must use http: or https:. / An http: URL must use the host localhost or 127.0.0.1. / An http: URL must include an explicit port. / Must not include credentials. / Must not include a query or fragment. / Must include a path, such as /callback. | Use a URL listed in the app's Redirect URLs, for example `http://localhost:8765/callback` or `https://host.example/oauth/return`. |
 | `oauth.callback_port` | Must be a whole number from 1 to 65535. | Set it to the local port that receives the forwarded callback, for example 8766. |

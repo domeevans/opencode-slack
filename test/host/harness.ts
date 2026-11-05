@@ -117,7 +117,7 @@ function projectConfig(project: Project, plugin: string, callLog: string): objec
     case "collision":
       return { ...LOCAL_PROVIDERS_OFF, plugins: [configured, probe({})], mcp: { servers: { slack: USER_SERVER } } }
     case "invalid":
-      return { ...LOCAL_PROVIDERS_OFF, plugins: [slack(plugin, { oauth: { client_id: CLIENT_ID, redirect_port: 8765 } }), probe({})] }
+      return { ...LOCAL_PROVIDERS_OFF, plugins: [slack(plugin, { oauth: { client_id: CLIENT_ID, bogus: 1 } }), probe({})] }
     case "connect":
       // No client ID in the options: it comes from the /connect Slack app entry.
       return { ...LOCAL_PROVIDERS_OFF, plugins: [slack(plugin, {}), probe({})] }

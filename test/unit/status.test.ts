@@ -10,7 +10,7 @@ const OK = parseOptions({ oauth: { client_id: "C1" } })
 const SECRET = "zz-client-secret-7c1e"
 const C1: ClientState = { client: { id: "C1", source: "options" }, invalid: false }
 const CONFIDENTIAL: ClientState = { client: { id: "C1", secret: SECRET, source: "connect" }, invalid: false }
-const INVALID = parseOptions({ oauth: { redirect_port: 8765 } })
+const INVALID = parseOptions({ oauth: { bogus: 1 } })
 
 const guarded = (): Rule[] => [BASE_ALLOW, ...defaultRules(), ...BASE_RULES.slice(1)]
 const deny = (action: string): Rule => ({ action, resource: "*", effect: "deny" })
@@ -49,14 +49,14 @@ const STATES: readonly (readonly [string, StatusInput, Pick<Status, "state" | "c
   ["an untested host with invalid options", input({ hostVersion: "0.0.0-dev-1", hostSupported: false, hostTested: false, active: false, parsed: INVALID }), {
     state: "not_configured",
     code: "OPTIONS_INVALID",
-    message: "Option oauth.redirect_port: This option is not supported.",
-    nextStep: "Use oauth.redirect_uri instead, for example http://localhost:8765/callback.",
+    message: "Option oauth.bogus: This option is not supported.",
+    nextStep: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
   }],
   ["invalid options", input({ parsed: INVALID, active: false }), {
     state: "not_configured",
     code: "OPTIONS_INVALID",
-    message: "Option oauth.redirect_port: This option is not supported.",
-    nextStep: "Use oauth.redirect_uri instead, for example http://localhost:8765/callback.",
+    message: "Option oauth.bogus: This option is not supported.",
+    nextStep: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
   }],
   ["no client ID", input({ client: { invalid: false } }), {
     state: "not_configured",
@@ -134,13 +134,13 @@ describe("buildStatus states", () => {
   })
 
   test("an untested host the user allowed, with invalid options, reports the options, not the allowance", () => {
-    const parsed = parseOptions({ allowUntestedHost: true, oauth: { client_id: "C1", redirect_port: 8765 } })
+    const parsed = parseOptions({ allowUntestedHost: true, oauth: { client_id: "C1", bogus: 1 } })
     const status = buildStatus(input({ hostVersion: "2.3.0", hostSupported: false, hostTested: false, active: false, parsed }))
     expect(status).toMatchObject({
       state: "not_configured",
       code: "OPTIONS_INVALID",
-      message: "Option oauth.redirect_port: This option is not supported.",
-      nextStep: "Use oauth.redirect_uri instead, for example http://localhost:8765/callback.",
+      message: "Option oauth.bogus: This option is not supported.",
+      nextStep: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
       host: { version: "2.3.0", range: ">=2.2.3 <2.3.0", tested: false },
     })
     expect(formatStatus(status)).not.toContain("allowUntestedHost")

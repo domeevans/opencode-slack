@@ -54,7 +54,7 @@ const STATES: readonly (readonly [string, Status])[] = [
   ["failed", status({ servers: [{ name: "slack", status: { status: "failed", error: "invalid_auth" } }] })],
   ["conflict", status({ nameInUse: true })],
   ["not_configured (no client ID)", status({ client: { invalid: false } })],
-  ["not_configured (invalid options)", status({ parsed: parseOptions({ oauth: { redirect_port: 1 } }), active: false })],
+  ["not_configured (invalid options)", status({ parsed: parseOptions({ oauth: { bogus: 1 } }), active: false })],
   ["host_untested", status({ hostVersion: "3.0.0", hostSupported: false, hostTested: false, active: false })],
 ]
 
