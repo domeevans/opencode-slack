@@ -1,4 +1,4 @@
-import { CALLBACK_PORT_EXAMPLE, DEFAULT_REDIRECT_URI, DEFAULT_SCOPES, DEFAULT_SERVER, HOSTED_REDIRECT_EXAMPLE } from "./defaults.js"
+import { CALLBACK_PORT_EXAMPLE, DEFAULT_REDIRECT_URI, DEFAULT_SCOPES, HOSTED_REDIRECT_EXAMPLE } from "./defaults.js"
 
 export interface Options {
   /** Pins the Slack app, for example in an organisation's managed config. Otherwise the /connect Slack app entry sets it. */
@@ -8,7 +8,6 @@ export interface Options {
   readonly callbackPort?: number
   readonly scopes: readonly string[]
   readonly clientSecret?: string
-  readonly server: string
   readonly allowUntestedHost: boolean
 }
 
@@ -24,9 +23,8 @@ export type ParsedOptions =
   | { readonly ok: true; readonly options: Options }
   | { readonly ok: false; readonly error: OptionsError }
 
-const TOP_KEYS = ["oauth", "server", "allowUntestedHost"]
+const TOP_KEYS = ["oauth", "allowUntestedHost"]
 const OAUTH_KEYS = ["client_id", "redirect_uri", "callback_port", "scopes", "client_secret"]
-const SERVER_NAME = /^[A-Za-z0-9_-]+$/
 const NO_SPACES = /^\S+$/
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -71,9 +69,7 @@ export function parseOptions(input: unknown): ParsedOptions {
   if (!isRecord(oauth)) return fail("oauth", "Must be an object.", "Set oauth to an object such as { \"client_id\": \"...\" }.")
   const unknownOAuthKey = Object.keys(oauth).find((key) => !OAUTH_KEYS.includes(key))
   if (unknownOAuthKey !== undefined) {
-    return fail(`oauth.${unknownOAuthKey}`, "This option is not supported.", unknownOAuthKey === "redirect_port"
-      ? `Use oauth.redirect_uri instead, for example ${DEFAULT_REDIRECT_URI}.`
-      : `Remove it. Supported oauth options: ${OAUTH_KEYS.join(", ")}.`)
+    return fail(`oauth.${unknownOAuthKey}`, "This option is not supported.", `Remove it. Supported oauth options: ${OAUTH_KEYS.join(", ")}.`)
   }
 
   const clientId = oauth.client_id
@@ -114,11 +110,6 @@ export function parseOptions(input: unknown): ParsedOptions {
     return fail("oauth.client_secret", "Needs oauth.client_id.", "Set oauth.client_id to your Slack app's client ID, or remove oauth.client_secret.")
   }
 
-  const server = raw.server ?? DEFAULT_SERVER
-  if (typeof server !== "string" || !SERVER_NAME.test(server)) {
-    return fail("server", "Must contain only letters, digits, _ and -.", `Use a name such as "${DEFAULT_SERVER}".`)
-  }
-
   const allowUntestedHost = raw.allowUntestedHost ?? false
   if (typeof allowUntestedHost !== "boolean") {
     return fail("allowUntestedHost", "Must be true or false.", "Set it to true only to run on an OpenCode version outside the supported range.")
@@ -132,7 +123,6 @@ export function parseOptions(input: unknown): ParsedOptions {
       ...(callbackPort === undefined ? {} : { callbackPort }),
       scopes: [...scopes],
       ...(clientSecret === undefined ? {} : { clientSecret }),
-      server,
       allowUntestedHost,
     },
   }

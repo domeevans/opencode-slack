@@ -20,7 +20,6 @@ describe("parseOptions defaults", () => {
         clientId: CLIENT,
         redirectUri: "http://localhost:8765/callback",
         scopes: ["channels:history", "channels:read", "search:read.public", "users:read"],
-        server: "slack",
         allowUntestedHost: false,
       },
     })
@@ -29,14 +28,13 @@ describe("parseOptions defaults", () => {
   test.each([undefined, null, {}, { oauth: {} }])("%p without a client ID is valid and leaves the client to /connect", (input) => {
     expect(parseOptions(input)).toEqual({
       ok: true,
-      options: { redirectUri: DEFAULT_REDIRECT_URI, scopes: [...DEFAULT_SCOPES], server: "slack", allowUntestedHost: false },
+      options: { redirectUri: DEFAULT_REDIRECT_URI, scopes: [...DEFAULT_SCOPES], allowUntestedHost: false },
     })
   })
 
   test("every field can be set", () => {
     const parsed = parseOptions({
       oauth: { client_id: CLIENT, redirect_uri: "http://127.0.0.1:9000/slack/cb", scopes: ["search:read.public"], client_secret: "s" },
-      server: "work-slack_2",
       allowUntestedHost: true,
     })
     expect(parsed).toEqual({
@@ -46,8 +44,7 @@ describe("parseOptions defaults", () => {
         redirectUri: "http://127.0.0.1:9000/slack/cb",
         scopes: ["search:read.public"],
         clientSecret: "s",
-        server: "work-slack_2",
-        allowUntestedHost: true,
+          allowUntestedHost: true,
       },
     })
   })
@@ -60,7 +57,6 @@ describe("parseOptions defaults", () => {
         redirectUri: "https://host.example/oauth/return",
         callbackPort: 49200,
         scopes: [...DEFAULT_SCOPES],
-        server: "slack",
         allowUntestedHost: false,
       },
     })
@@ -101,7 +97,7 @@ describe("parseOptions rejects", () => {
 
   test("unknown top-level keys, naming the supported ones", () => {
     expect(rejected({ ...withOAuth({}), policy: { allow: ["write"] } })).toEqual({
-      code: "OPTIONS_INVALID", field: "policy", message: "This option is not supported.", next: "Remove it. Supported options: oauth, server, allowUntestedHost.",
+      code: "OPTIONS_INVALID", field: "policy", message: "This option is not supported.", next: "Remove it. Supported options: oauth, allowUntestedHost.",
     })
   })
 
@@ -109,20 +105,15 @@ describe("parseOptions rejects", () => {
     expect(rejected({ oauth })).toMatchObject({ field: "oauth", message: "Must be an object." })
   })
 
-  test("redirect_port, pointing to oauth.redirect_uri instead of accepting it as an alias", () => {
-    expect(rejected(withOAuth({ redirect_port: 8765 }))).toEqual({
-      code: "OPTIONS_INVALID",
-      field: "oauth.redirect_port",
-      message: "This option is not supported.",
-      next: `Use oauth.redirect_uri instead, for example ${DEFAULT_REDIRECT_URI}.`,
-    })
-  })
-
-  test("other unknown oauth keys, naming the supported ones", () => {
+  test("unknown oauth keys, redirect_port included, naming the supported ones", () => {
     expect(rejected(withOAuth({ clientId: "x" }))).toEqual({
       code: "OPTIONS_INVALID",
       field: "oauth.clientId",
       message: "This option is not supported.",
+      next: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
+    })
+    expect(rejected(withOAuth({ redirect_port: 8765 }))).toMatchObject({
+      field: "oauth.redirect_port",
       next: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
     })
   })
@@ -237,9 +228,9 @@ describe("parseOptions rejects", () => {
     })
   })
 
-  test.each([["a dot", "slack.work"], ["a space", "my slack"], ["empty", ""], ["a number", 1]])("a server name with %s", (_label, server) => {
-    expect(rejected(withOAuth({}, { server }))).toEqual({
-      code: "OPTIONS_INVALID", field: "server", message: "Must contain only letters, digits, _ and -.", next: 'Use a name such as "slack".',
+  test("server is not an option: the server is always named slack", () => {
+    expect(rejected(withOAuth({}, { server: "work" }))).toEqual({
+      code: "OPTIONS_INVALID", field: "server", message: "This option is not supported.", next: "Remove it. Supported options: oauth, allowUntestedHost.",
     })
   })
 
@@ -282,7 +273,7 @@ describe("errors never echo values", () => {
     ["a duplicated scope", withOAuth({ scopes: [MARKER, MARKER] })],
     ["a spaced scope", withOAuth({ scopes: [`${MARKER} x`] })],
     ["a non-string secret", withOAuth({ client_secret: [MARKER] })],
-    ["a bad server name", withOAuth({}, { server: `${MARKER}.x` })],
+    ["a server name", withOAuth({}, { server: MARKER })],
     ["a bad override", withOAuth({}, { allowUntestedHost: MARKER })],
   ])("%s", (_label, input) => {
     expect(JSON.stringify(rejected(input))).not.toContain(MARKER)

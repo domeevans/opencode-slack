@@ -14,6 +14,13 @@ import {
   type OwnedMethod,
   type ToolCall,
   type ToolsRpcOptions,
+  // The module's own types stay internal, since no plugin imports them (LINEAR-R15, GRANOLA-R20); the typecheck checks it.
+  // @ts-expect-error Code is not exported
+  type Code as _Code,
+  // @ts-expect-error NextSteps is not exported
+  type NextSteps as _NextSteps,
+  // @ts-expect-error Failure is not exported
+  type Failure as _Failure,
 } from "../../src/host/tools-rpc.js"
 
 type Effect = "allow" | "deny" | "ask"
@@ -73,6 +80,8 @@ interface Harness {
   contract: { id: string; methods: Record<string, { input: any; output: any; errors?: Record<string, any> }> }
   handlers: Record<string, Handler>
   hook: (evaluation: Evaluation) => void
+  /** The host's permission check, as a plugin-owned spec's assert or inner executor call meets it. */
+  check: (call: ToolCall, action: string) => void
   calls: { tool: string; input: unknown; call: ToolCall }[]
   evaluations: Evaluation[]
   disposed: string[]
@@ -91,10 +100,14 @@ async function setup(options: Setup = {}): Promise<Harness> {
   let contract: Harness["contract"] | undefined
   let handlers: Record<string, Handler> = {}
   let hook: Harness["hook"] = () => {}
-  /** The host's check inside the executor: the agent's rules, then the session's, then the evaluate hook. */
+  /**
+   * The host's check inside the executor: the agent's rules, then the session's, then the evaluate hook. A rule deny
+   * never reaches evaluate hooks (stock 2.2.3 and 2.2.4): it rejects at once with "Permission denied: <action>".
+   */
   const check = (call: ToolCall, action: string) => {
     const rules = [...(agents[call.agent] ?? []), ...(sessions[call.sessionID]?.permissions ?? [])]
     const effect = rules.findLast((entry) => hostMatch(entry.action, action) && hostMatch(entry.resource, "*"))?.effect ?? "ask"
+    if (effect === "deny") throw toolError(`Permission denied: ${action}`, Object.assign(new Error("blocked"), { _tag: "Permission.BlockedError" }))
     const evaluation: Evaluation = { sessionID: call.sessionID, agent: call.agent, action, resources: ["*"], source: { type: "tool", messageID: call.messageID, id: call.id }, effect }
     hook(evaluation)
     evaluations.push(evaluation)
@@ -163,7 +176,7 @@ async function setup(options: Setup = {}): Promise<Harness> {
         }),
     ...(options.owned ? { owned: options.owned } : {}),
   })
-  return { contract: contract!, handlers, hook: (evaluation) => hook(evaluation), calls, evaluations, disposed, stop }
+  return { contract: contract!, handlers, hook: (evaluation) => hook(evaluation), check, calls, evaluations, disposed, stop }
 }
 
 function rpcContext(signal = new AbortController().signal): RpcContext {
@@ -175,6 +188,25 @@ const call = (h: Harness, method: string, input: unknown = { query: "q" }, sessi
 
 /** Matches a refusal. Bun's toMatchObject writes its matchers into the value it checks, so it checks a copy. */
 const refusedWith = (value: unknown, code: string) => expect(structuredClone(value)).toMatchObject(failure(code))
+
+/** The codes only an MCP method can raise: their next steps are optional in a block without MCP methods. */
+const MCP_ONLY = ["SERVER_CONFLICT", "AUTH_REQUIRED", "CONNECTING", "CONNECTION_FAILED", "DISABLED", "NOT_REGISTERED", "TOOL_UNAVAILABLE", "UPSTREAM_ERROR"] as const
+
+/** Runs a body with these next steps removed from the block, as a block that omits them; restores them afterwards. */
+const withoutSteps = async (keys: readonly string[], body: () => Promise<void>) => {
+  const steps = NEXT_STEPS as Record<string, string | undefined>
+  const saved = keys.map((key) => [key, steps[key]] as const)
+  for (const key of keys) delete steps[key]
+  try {
+    await body()
+  } finally {
+    for (const [key, value] of saved) if (value !== undefined) steps[key] = value
+  }
+}
+
+/** The next step of a refusal by a deny rule: change the rule, since there is no prompt to answer. */
+const denyNext = (action: string, agent = "build") =>
+  `Remove or narrow the deny rule for ${action} in the agent "${agent}" or in the session, or add a later allow rule for ${action} to the session, or use a session whose agent allows it.`
 
 const failure = (code: string) => ({
   type: "failed",
@@ -395,6 +427,27 @@ mcpDescribe("permissions", () => {
     expect(refused.data.next).toBe(NEXT_STEPS.PERMISSION_DENIED)
   })
 
+  mcpTest("a denied MCP read names its action, the agent and a deny rule, before or inside the executor; an ask keeps its own step", async () => {
+    // Hidden by the agent's deny rule: refused before the executor, which never runs.
+    const locked = await setup({ agents: { locked: [rule("*", "allow"), rule(`${SERVER}_*`, "deny")] }, sessions: { ses_1: { agent: "locked" } } })
+    const hiddenRead = await call(locked, READ)
+    refusedWith(hiddenRead, "PERMISSION_DENIED")
+    expectStartsWith(hiddenRead.message, `PERMISSION_DENIED: ${ID} is hidden from this session's agent by a deny rule. `)
+    expect(hiddenRead.data.next).toBe(denyNext(ID, "locked"))
+    expect(locked.calls).toEqual([])
+    // Denied inside the executor (a rule the hidden-tool check does not see): OpenCode's "Permission denied: <action>",
+    // which never reaches the evaluate hook.
+    const blocked = Object.assign(new Error("blocked"), { _tag: "Permission.BlockedError" })
+    const inside = await setup({ tools: { [ID]: async () => Promise.reject(toolError(`Permission denied: ${ID}`, blocked)) } })
+    const refused = await call(inside, READ)
+    refusedWith(refused, "PERMISSION_DENIED")
+    expect(refused.message).toBe(`PERMISSION_DENIED: ${ID} was refused by a deny rule for this session's agent: Permission denied: ${ID}. Next step: ${denyNext(ID)}`)
+    expect(refused.data).toEqual({ code: "PERMISSION_DENIED", next: denyNext(ID) })
+    // An ask is unchanged: the plugin's own next step.
+    const asked = await call(await setup({ agents: { build: [rule("*", "allow"), rule(ID, "ask")] } }), READ)
+    expect(asked.data.next).toBe(NEXT_STEPS.PERMISSION_DENIED)
+  })
+
   mcpTest("refuses an ask at once: the hook turns this call's ask into a deny, and no prompt is left", async () => {
     const h = await setup({ agents: { build: [rule("*", "allow"), rule(ID, "ask")] } })
     const refused = await call(h, READ)
@@ -445,6 +498,13 @@ mcpDescribe("server and tool state", () => {
     refusedWith(await call(h, READ), "SERVER_CONFLICT")
     expect(h.calls).toEqual([])
   })
+
+  mcpTest("a block may omit SERVER_CONFLICT's next step (Plaud never raises it): the shared default names the server", async () =>
+    withoutSteps(["SERVER_CONFLICT"], async () => {
+      const refused = await call(await setup({ managed: false }), READ)
+      refusedWith(refused, "SERVER_CONFLICT")
+      expect(refused.data.next).toBe(`Remove your own "${SERVER}" server from opencode.json so that the plugin manages it, then run "opencode reload".`)
+    }))
 
   mcpTest("names the connection state when the tool is missing, and TOOL_UNAVAILABLE when the server is connected", async () => {
     const states: [string, string][] = [["pending", "CONNECTING"], ["needs_auth", "AUTH_REQUIRED"], ["failed", "CONNECTION_FAILED"], ["disabled", "DISABLED"], ["absent", "NOT_REGISTERED"], ["connected", "TOOL_UNAVAILABLE"]]
@@ -609,10 +669,33 @@ describe("plugin-owned methods", () => {
     refusedWith(refused, "PERMISSION_DENIED")
     expectStartsWith(refused.message, "PERMISSION_DENIED: plugin_owned_read needs plugin_download, which was refused for this session's agent: A script cannot answer")
     expect(refused.data.next).toBe("Add an allow rule for plugin_download to the session's agent or to the session, or use a session whose agent allows it.")
-    // The next call starts clean: its own refusal names its own action.
+    // The next call starts clean: its own refusal, a deny, names its own action and the rule to change.
     const again = await call(h, "owned_read", {})
-    expectStartsWith(again.message, "PERMISSION_DENIED: plugin_owned_read was refused")
-    expect(again.data.next).toBe(NEXT_STEPS.PERMISSION_DENIED)
+    expectStartsWith(again.message, "PERMISSION_DENIED: plugin_owned_read was refused by a deny rule")
+    expect(again.data.next).toBe(denyNext("plugin_owned_read"))
+  })
+
+  test("an inner read a rule denies, which never reaches the hook, is named with the agent and a deny next step", async () => {
+    const h: Harness = await setup({
+      agents: { build: [rule("*", "allow"), rule("plugin_inner_*", "deny")], careful: [rule("*", "allow"), rule("plugin_inner_*", "ask")] },
+      sessions: { ses_1: { agent: "build" }, ses_careful: { agent: "careful" }, ses_reopen: { agent: "build", permissions: [rule("plugin_inner_read", "allow")] } },
+      // The spec checks its own action, then reads through another action, as Plaud's recent reads plaud_list_files.
+      owned: [owned(async (_input, live) => (h.check(live, "plugin_owned_read"), h.check(live, "plugin_inner_read"), { ran: true }))],
+    })
+    const refused = await call(h, "owned_read", {})
+    refusedWith(refused, "PERMISSION_DENIED")
+    expect(refused.message).toBe(
+      `PERMISSION_DENIED: plugin_owned_read needs plugin_inner_read, which a deny rule refuses for this session's agent: Permission denied: plugin_inner_read. Next step: ${denyNext("plugin_inner_read")}`,
+    )
+    expect(refused.data).toEqual({ code: "PERMISSION_DENIED", next: denyNext("plugin_inner_read") })
+    // The hook saw only the allowed check of the method's own action: OpenCode does not evaluate hooks for a deny.
+    expect(h.evaluations.map((evaluation) => [evaluation.action, evaluation.effect])).toEqual([["plugin_owned_read", "allow"]])
+    // The same inner read under an ask stays as today: the ask's wording and an allow-rule next step.
+    const asked = await call(h, "owned_read", {}, "ses_careful")
+    expectStartsWith(asked.message, "PERMISSION_DENIED: plugin_owned_read needs plugin_inner_read, which was refused for this session's agent: A script cannot answer")
+    expect(asked.data.next).toBe("Add an allow rule for plugin_inner_read to the session's agent or to the session, or use a session whose agent allows it.")
+    // A later session allow reopens it, as the next step says.
+    expect(await call(h, "owned_read", {}, "ses_reopen")).toEqual({ ran: true })
   })
 
   test("a failure that is not a permission refusal propagates, unless pluginError names it", async () => {
@@ -769,6 +852,18 @@ describe("registration", () => {
     await h.stop()
     expect(h.disposed.sort()).toEqual(["hook", "rpc"])
   })
+
+  test("the MCP-only next steps are optional without MCP methods; with them, registration names the first one missing", async () =>
+    withoutSteps(MCP_ONLY, async () => {
+      if (MCP) {
+        // SERVER_CONFLICT has a shared default, so the first missing step it names is AUTH_REQUIRED.
+        await expect(setup()).rejects.toThrow("registerToolsRpc: MCP methods need NEXT_STEPS.AUTH_REQUIRED")
+        return
+      }
+      const spec: OwnedMethod = { name: "owned_read", action: "plugin_owned_read", description: "", input: {}, output: {}, run: async () => ({ ran: true }) }
+      const h = await setup({ mcp: false, owned: [spec] })
+      expect(await call(h, "owned_read", {})).toEqual({ ran: true })
+    }))
 
   test("refuses a method name that is describe or taken twice", async () => {
     const spec: OwnedMethod = { name: "describe", action: "x", description: "", input: {}, output: {}, run: async () => null }

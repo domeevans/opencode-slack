@@ -5,8 +5,8 @@ import type { Rule } from "../../src/permissions.js"
 import type { ServerStatus } from "../../src/status.js"
 
 type Context = Plugin.Context
-export type McpEditor = Parameters<Parameters<Context["mcp"]["transform"]>[0]>[0]
-export type AgentEditor = Parameters<Parameters<Context["agent"]["transform"]>[0]>[0]
+type McpEditor = Parameters<Parameters<Context["mcp"]["transform"]>[0]>[0]
+type AgentEditor = Parameters<Parameters<Context["agent"]["transform"]>[0]>[0]
 type IntegrationEditor = Parameters<Parameters<Context["integration"]["transform"]>[0]>[0]
 type MethodRegistration = Parameters<IntegrationEditor["method"]["update"]>[0]
 type CredentialValue = NonNullable<Awaited<ReturnType<Context["integration"]["connection"]["resolve"]>>>
@@ -19,7 +19,7 @@ type ToolEditor = Parameters<Parameters<Context["tool"]["transform"]>[0]>[0]
 type Namespace = Parameters<ToolEditor["namespace"]>[0]
 
 /** The members of `Plugin.Context` that `setup` uses. */
-export type UsedContext = {
+type UsedContext = {
   readonly app: Pick<Context["app"], "version">
   readonly options: Context["options"]
   readonly mcp: Pick<Context["mcp"], "transform" | "list" | "reload">
@@ -31,7 +31,7 @@ export type UsedContext = {
   readonly permission: Pick<Context["permission"], "hook">
   readonly command: Pick<Context["command"], "transform">
   readonly session: Pick<Context["session"], "synthetic" | "get">
-  readonly skill: Pick<Context["skill"], "transform">
+  readonly skill: Pick<Context["skill"], "transform" | "list">
   readonly location: Pick<Context["location"], "directory">
 }
 
@@ -45,7 +45,7 @@ export const BASE_RULES: readonly Rule[] = [
   { action: "read", resource: "*.env.example", effect: "allow" },
 ]
 
-export interface FakeAgent {
+interface FakeAgent {
   readonly id: string
   permissions: Rule[]
 }
@@ -101,7 +101,7 @@ export interface FakeSession {
 }
 
 /** The directory of the fake host's location. */
-export const FAKE_LOCATION = "/tmp/slack-fake-location"
+const FAKE_LOCATION = "/tmp/slack-fake-location"
 
 export interface FakeHostInput {
   readonly version?: string
@@ -114,6 +114,8 @@ export interface FakeHostInput {
   readonly credentials?: Readonly<Record<string, CredentialValue>>
   /** Sessions by ID, for the tools RPC. */
   readonly sessions?: Readonly<Record<string, FakeSession>>
+  /** Skills from the user's or the project's skill folders. One with a registered skill's id wins, as in OpenCode. */
+  readonly userSkills?: readonly { readonly id: string; readonly path: string }[]
 }
 
 /** An event stream that delivers what `push` sends and ends when its signal aborts. */
@@ -289,6 +291,12 @@ export function fakeHost(input: FakeHostInput = {}) {
         callback({ add: (skill: SkillInfo) => void skills.push(skill) } as unknown as SkillEditor)
         return registration
       },
+      list: (async () => {
+        if (failLists) throw new Error("host unavailable")
+        const users = input.userSkills ?? []
+        const data = [...users, ...skills.filter((skill) => !users.some((user) => user.id === skill.id))]
+        return { location: { directory: FAKE_LOCATION }, data }
+      }) as never,
     },
     location: { directory: FAKE_LOCATION as Context["location"]["directory"] },
   }

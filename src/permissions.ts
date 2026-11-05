@@ -1,4 +1,5 @@
 import type { Plugin } from "@opencode/plugin"
+import { SERVER } from "./defaults.js"
 import { READ_TOOLS } from "./tools.js"
 
 type AgentEditor = Parameters<Parameters<Plugin.Context["agent"]["transform"]>[0]>[0]
@@ -10,10 +11,10 @@ export interface Rule {
 }
 
 /** Ask before every tool on the server, then allow the known reads. Later rules win. */
-export function defaultRules(server: string): Rule[] {
+export function defaultRules(): Rule[] {
   return [
-    { action: `${server}_*`, resource: "*", effect: "ask" },
-    ...READ_TOOLS.map((tool): Rule => ({ action: `${server}_${tool}`, resource: "*", effect: "allow" })),
+    { action: `${SERVER}_*`, resource: "*", effect: "ask" },
+    ...READ_TOOLS.map((tool): Rule => ({ action: `${SERVER}_${tool}`, resource: "*", effect: "allow" })),
   ]
 }
 
@@ -29,8 +30,8 @@ const BASE_ALLOW: Rule = { action: "*", resource: "*", effect: "allow" }
  * Verified on OpenCode 2.2.3. Agents created after plugins run, such as agents defined only in user config,
  * get no rules; status names them as unguarded and shows these rules for each agent's own permissions.
  */
-export function insertDefaultRules(editor: AgentEditor, server: string): void {
-  const block = defaultRules(server)
+export function insertDefaultRules(editor: AgentEditor): void {
+  const block = defaultRules()
   for (const agent of editor.list()) {
     const at = agent.permissions.findIndex((rule) => same(rule, BASE_ALLOW))
     if (at === -1) continue

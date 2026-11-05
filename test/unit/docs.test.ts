@@ -5,7 +5,9 @@ import { readdirSync, readFileSync } from "node:fs"
 import { join, relative } from "node:path"
 import { fileURLToPath } from "node:url"
 import { parameters, SLACK_SCHEMAS } from "../host/slack-catalog.js"
-import { classify } from "../../src/tools.js"
+import { parseOptions } from "../../src/options.js"
+import { buildStatus } from "../../src/status.js"
+import { classify, NAMESPACE_DESCRIPTION } from "../../src/tools.js"
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url))
 const markdown = (dir: string): string[] =>
@@ -90,6 +92,47 @@ describe("the skill and the docs", () => {
     const skill = read("skills/slack-search/SKILL.md")
     for (const tool of ["slack_search_public", "slack_search_channels", "slack_search_users"])
       expect({ tool, query: uses("skill", skill).some((use) => use.tool === tool && use.parameter === "query") }).toEqual({ tool, query: true })
+  })
+})
+
+describe("tool names and files the text names", () => {
+  // `slack_*` is the catch-all rule, and `slack_<tool>` a pattern; `slack_archive` is the docs' example of another
+  // server's tool that the catch-all also matches.
+  const NOT_TOOLS = new Set(["slack_", "slack_archive"])
+
+  test("every slack_ tool named in the skill and the docs is one of Slack's, after one permission prefix", () => {
+    const named = FILES.flatMap((file) => [...read(file).matchAll(/`(slack_[a-z_]*)/g)].map((match) => ({ file, name: match[1]! })))
+    expect(named.length).toBeGreaterThan(50)
+    const tool = (name: string) => (SLACK_SCHEMAS[name] === undefined && name.startsWith("slack_slack_") ? name.slice("slack_".length) : name)
+    expect(named.filter(({ name }) => !NOT_TOOLS.has(name) && SLACK_SCHEMAS[tool(name)] === undefined)).toEqual([])
+  })
+
+  test("the skill links only to files the package ships, or to absolute URLs", () => {
+    const shipped = (JSON.parse(read("package.json")) as { files: string[] }).files
+    const skill = read("skills/slack-search/SKILL.md")
+    const targets = [
+      ...[...skill.matchAll(/\]\(([^)\s]+)\)/g)].map((match) => match[1]!),
+      ...[...skill.matchAll(/`([\w./-]+\.(?:md|json|ts|js))`/g)].map((match) => match[1]!),
+    ]
+    const unshipped = targets.filter((target) => !/^https:\/\//.test(target) && !shipped.some((entry) => target === entry || target.startsWith(`${entry}/`)))
+    expect(unshipped).toEqual([])
+  })
+})
+
+describe("what asks first", () => {
+  // Every class that asks by default, and how each text that lists them names it.
+  const NAMES: Record<string, RegExp> = { private: /private (search|channels)/i, file: /(file reads|reading files)/i, write: /writes/i }
+
+  test("status, the Code Mode namespace and the Jelly summary each name every class that asks", () => {
+    const asking: string[] = [...new Set(Object.keys(SLACK_SCHEMAS).map(classify))].filter((toolClass) => toolClass !== "read").sort()
+    const { asksBefore } = buildStatus({
+      version: "9.9.9", hostVersion: "2.2.3", hostSupported: true, hostTested: true, parsed: parseOptions({}), active: true, nameInUse: false,
+      client: { invalid: false }, servers: [], tools: [], agents: [], shadowedSkills: [],
+    })
+    expect(asking).toEqual(Object.keys(NAMES).sort())
+    const summary = (JSON.parse(read("package.json")) as { jelly: { summary: string } }).jelly.summary
+    for (const [where, text] of [["status", asksBefore.join("; ")], ["namespace", NAMESPACE_DESCRIPTION], ["jelly.summary", summary]] as const)
+      for (const toolClass of asking) expect({ where, toolClass, named: NAMES[toolClass]!.test(text) }).toEqual({ where, toolClass, named: true })
   })
 })
 

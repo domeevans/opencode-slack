@@ -19,7 +19,6 @@ Every option is optional. Pass options in the object form of a `plugins` entry:
           "scopes": ["channels:history", "channels:read", "search:read.public", "users:read"],
           "client_secret": "{env:SLACK_CLIENT_SECRET}"
         },
-        "server": "slack",
         "allowUntestedHost": false
       }
     }
@@ -34,10 +33,11 @@ Every option is optional. Pass options in the object form of a `plugins` entry:
 | `oauth.callback_port` | Not set | A whole number from 1 to 65535: the port of OpenCode's local callback listener on `127.0.0.1`. Required with an `https:` `oauth.redirect_uri`, and refused with a loopback one, whose own port is the listener's. |
 | `oauth.scopes` | `["channels:history", "channels:read", "search:read.public", "users:read"]` | A non-empty list of unique Slack user scopes, each without spaces. Your list replaces the default list. See [Scopes](#scopes). |
 | `oauth.client_secret` | Not set (public client with PKCE) | A non-empty string, and only together with `oauth.client_id`. Set it only for a Slack app that does not use PKCE, and only through `{env:NAME}`. See [Client secret](#client-secret). |
-| `server` | `slack` | Letters, digits, `_` and `-` only. This is the MCP server name. It is also the prefix of every Slack tool name and permission action (`<server>_<tool>`), the Code Mode namespace (`tools.<server>`), and part of the `/connect` entry ID (`<server>-app`). |
 | `allowUntestedHost` | `false` | `true` or `false`. If it is `true`, the plugin runs on an OpenCode version outside its supported range, and status keeps warning. See [Host check](#host-check). |
 
 Unknown keys are rejected, at the top level and inside `oauth`.
+
+The MCP server is always named `slack`. That name is the prefix of every Slack tool name and permission action (`slack_<tool>`, for example `slack_slack_send_message`) and the Code Mode namespace (`tools.slack`).
 
 ### The callback: loopback or hosted
 
@@ -78,9 +78,9 @@ The checks run in this order, and status reports only the first problem:
 | Field | Message | Next step |
 | --- | --- | --- |
 | `options` | Plugin options must be an object. | Set options to an object, or remove them. |
-| any other top-level key | This option is not supported. | Remove it. Supported options: oauth, server, allowUntestedHost. |
+| any other top-level key | This option is not supported. | Remove it. Supported options: oauth, allowUntestedHost. |
 | `oauth` | Must be an object. | Set oauth to an object such as `{ "client_id": "..." }`. |
-| any other `oauth` key | This option is not supported. | Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret. For `redirect_port`, the next step is instead: Use oauth.redirect_uri instead, for example `http://localhost:8765/callback`. |
+| any other `oauth` key | This option is not supported. | Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret. |
 | `oauth.client_id` | Must be a non-empty string without spaces. | Copy the client ID from the Basic Information page of your Slack app. |
 | `oauth.redirect_uri` | Must be a string. / Must be a valid URL. / Must use http: or https:. / An http: URL must use the host localhost or 127.0.0.1. / An http: URL must include an explicit port. / Must not include credentials. / Must not include a query or fragment. / Must include a path, such as /callback. | Use a URL listed in the app's Redirect URLs, for example `http://localhost:8765/callback` or `https://host.example/oauth/return`. |
 | `oauth.callback_port` | Must be a whole number from 1 to 65535. | Set it to the local port that receives the forwarded callback, for example 8766. |
@@ -90,7 +90,6 @@ The checks run in this order, and status reports only the first problem:
 | `oauth.scopes` | Lists a scope more than once. | Remove the duplicate scope. |
 | `oauth.client_secret` | Must be a non-empty string. | Set it to `{env:SLACK_CLIENT_SECRET}` and export that variable, or remove it to use PKCE. |
 | `oauth.client_secret` | Needs oauth.client_id. | Set oauth.client_id to your Slack app's client ID, or remove oauth.client_secret. |
-| `server` | Must contain only letters, digits, _ and -. | Use a name such as "slack". |
 | `allowUntestedHost` | Must be true or false. | Set it to true only to run on an OpenCode version outside the supported range. |
 
 ### Client secret
@@ -144,7 +143,7 @@ Turning on PKCE makes the app a public client. Slack cannot turn PKCE off again 
 
 ## What the plugin registers
 
-With a client ID, the plugin adds one MCP server under the name in `server`:
+With a client ID, the plugin adds one MCP server named `slack`:
 
 ```json
 {
@@ -164,17 +163,17 @@ The plugin always sends `redirect_uri`. Without it, OpenCode would use `http://1
 
 **In `/connect`:** OpenCode lists the server's own sign-in, which the plugin names **Slack**. Without `oauth.client_id` in the options, the plugin also adds **Slack app** (ID `slack-app`) for the client ID. With it, there is no **Slack app** entry, and no status line or next step mentions one: nobody is asked to paste a client ID.
 
-**Name collision.** If your config already defines an MCP server with the same name, for example `mcp.servers.slack`, the plugin leaves it alone. Status then shows the state `conflict` with the code `SERVER_NAME_IN_USE`. Remove your entry, or set `server` to another name.
+**Name collision.** If your config already defines an MCP server with the same name, for example `mcp.servers.slack`, the plugin leaves it alone. Status then shows the state `conflict` with the code `SERVER_NAME_IN_USE`. Remove your entry: Slack's tools then come from the plugin's server.
 
 The plugin defines no tools of its own. Besides the server and the `/connect` entries, it registers the default permission rules, the `/slack-status` command, the status RPC, the TUI `/slack` dialog and the `slack-search` skill.
 
 ## Permissions
 
-The plugin adds `ask` rules to each agent through OpenCode's agent transform. Your `permissions` rules and saved "Always allow" approvals then override them. There is no allow-list option and no permission hook.
+The plugin adds one `ask` rule for every Slack tool and one `allow` rule per known read to each agent, through OpenCode's agent transform. Your `permissions` rules and saved "Always allow" approvals then override them. Its only permission hook is the tools RPC's, which refuses an ask on a script's own call (see [Scripting](scripting.md)).
 
 ### The inserted rules
 
-For every agent whose rules contain the base rule `{ "action": "*", "resource": "*", "effect": "allow" }`, the plugin inserts this block directly after the first such rule, unless the block already appears anywhere after it. The example uses the default server name `slack`:
+For every agent whose rules contain the base rule `{ "action": "*", "resource": "*", "effect": "allow" }`, the plugin inserts this block directly after the first such rule, unless the block already appears anywhere after it:
 
 ```jsonc
 [
@@ -213,11 +212,16 @@ Some agents are created after the plugin inserts its rules, so they get none:
 
 These agents run Slack writes and unknown Slack tools without asking. `/slack-status` and the `/slack` dialog list them in the `Agents without default rules` row. Built-in agents are covered, including when your config only adjusts one, such as `agents.build`.
 
-For an agent named `reviewer`, a connected status has this `Agents without default rules` row and next step. The rule list is shortened here; status prints the whole block from [The inserted rules](#the-inserted-rules), with your `server` name as the prefix:
+For an agent named `reviewer`, a connected status has this `Agents without default rules` row and next step. The rule list is shortened here; status prints the whole block from [The inserted rules](#the-inserted-rules). The status RPC carries the names in `unguardedAgents` and the same next step:
 
 ```text
-Agents without default rules: These agents run Slack writes and unknown tools without asking: reviewer. In your OpenCode config, put these rules first in each agent's own "permissions" list (agents.<name>.permissions): [{ "action": "slack_*", "resource": "*", "effect": "ask" }, { "action": "slack_slack_search_public", "resource": "*", "effect": "allow" }, …]. Follow them with your top-level rules for slack_ actions, so yours keep winning. Do not add them to the top-level "permissions": there they would loosen stricter agents such as explore.
-Next step: Put the default Slack rules shown under "Agents without default rules" first in each of these agents' own permissions (agents.<name>.permissions), so they ask before Slack writes: reviewer.
+Agents without default rules: reviewer
+[
+  { "action": "slack_*", "resource": "*", "effect": "ask" },
+  { "action": "slack_slack_search_public", "resource": "*", "effect": "allow" },
+  …
+]
+Next step: Put the default rules shown by /slack-status first in each listed agent's own permissions, in opencode.json or the agent's Markdown file, followed by your top-level rules for Slack tools.
 ```
 
 **Fix:** add the block above to **that agent's own** `permissions`. Then repeat, after the block, any rules you already have for Slack tools in the top-level `permissions`, so they keep winning for that agent:
@@ -243,7 +247,7 @@ Next step: Put the default Slack rules shown under "Agents without default rules
 }
 ```
 
-In a Markdown agent, put the same rules in its `permissions` frontmatter. If the agent should not use Slack at all, give it `{ "action": "slack_*", "resource": "*", "effect": "deny" }` instead. If you set `server`, replace the `slack_` prefix of each action with `<server>_`.
+In a Markdown agent, put the same rules in its `permissions` frontmatter. If the agent should not use Slack at all, give it `{ "action": "slack_*", "resource": "*", "effect": "deny" }` instead.
 
 The repeat matters because OpenCode appends an agent's own rules after the top-level rules. Without the repeat, the block would turn a top-level Slack deny into an ask for that agent.
 
@@ -251,7 +255,7 @@ Do not put the block in the top-level `permissions`. OpenCode appends top-level 
 
 ### Tool classes
 
-The plugin classifies the tools Slack's MCP server lists by name. Tool names and permission actions are `<server>_<tool>`, for example `slack_slack_send_message`.
+The plugin classifies the tools Slack's MCP server lists by name. Tool names and permission actions are `slack_<tool>`, for example `slack_slack_send_message`.
 
 | Class | Default | Slack tools |
 | --- | --- | --- |
@@ -296,6 +300,8 @@ Scopes per tool, from Slack's [MCP scope table](https://docs.slack.dev/ai/slack-
 | Creating conversations (`slack_create_conversation`) | `channels:write` (public channels), `groups:write` (private channels), `im:write` (direct messages), `mpim:write` (group direct messages) |
 | Uploading files (`slack_get_file_upload_url`, `slack_complete_file_upload`) | `files:write` |
 
+The read tools read whatever your scopes reach. With the default scopes, that is public channels. If you add `groups:history`, `im:history` or `mpim:history`, `slack_read_channel` and `slack_read_thread` also read private channels and direct messages without asking; only the search across them asks. To make those reads ask too, add `{ "action": "slack_slack_read_channel", "resource": "*", "effect": "ask" }`, and the same for `slack_slack_read_thread` and `slack_slack_list_user_channels`.
+
 To add scopes:
 
 1. Add them to the Slack app. Reinstall it or get approval if Slack asks.
@@ -325,10 +331,11 @@ Approving a write tool in OpenCode does not grant its Slack scope. Without the s
 | `tools` | Counts of `read`, `private`, `file`, `write` and `unknown` tools on the server, and `unknownNames`: at most 20 of the unknown tools' names, only those made of lowercase letters, digits and `_` |
 | `unguardedAgents` | Agents that would run an unknown Slack tool without asking; empty when there are none. An agent whose own rules already ask or deny for every Slack tool is not listed. |
 | `host` | `version` (`null` if OpenCode reports none), `range` (the supported range) and `tested` (true only for 2.2.3, 2.2.4 and 2.2.5) |
+| `shadowedSkills` | Skills with a bundled skill's id, `slack-search`, that OpenCode loads instead of the bundled one, each as `id` and `path`: for example a skill in your own or the project's skill folders. Empty when there are none. |
 
 Scripts have a second RPC, `slack.workspace.tools`, which calls Slack's read tools with no model. It has its own error codes; see [Scripting](scripting.md).
 
-The text surfaces show the rows `Connection`, `Account`, `Access`, `Server`, `Client`, `Callback`, `Scopes`, `Tools`, `Agents without default rules`, `OpenCode` and `Next step`, in that order. `Client`, `Callback` and `Scopes` appear when they apply; every other row is always there, with `none` when no agent lacks the default rules. The RPC has one error, `unavailable`. OpenCode does not record which Slack account signed in, and the plugin never reads tokens, so status has no account field. Slack shows the workspace and account on its sign-in page.
+The text surfaces show the rows `Connection`, `Account`, `Access`, `Server`, `Client`, `Callback`, `Scopes`, `Skills`, `Tools`, `Agents without default rules`, `OpenCode` and `Next step`, in that order. `Client`, `Callback`, `Scopes` and `Skills` appear when they apply; every other row is always there, with `none` when no agent lacks the default rules. The RPC has one error, `unavailable`. OpenCode does not record which Slack account signed in, and the plugin never reads tokens, so status has no account field. Slack shows the workspace and account on its sign-in page.
 
 ## Errors
 
@@ -342,9 +349,12 @@ Every error the plugin raises reads `CODE: What happened. Next step: What to do.
 | `AUTH_REQUIRED` | sign-in required | Run /connect and choose Slack, then press o or Enter to open the sign-in page (in a terminal, opencode mcp auth slack opens the browser automatically). |
 | `CONNECTION_FAILED` | failed | Fix the error shown, then reconnect slack in /mcps. |
 | none: connecting | connecting | Wait a few seconds, then run /slack-status again (or press r in /slack). |
+| none: OpenCode has not loaded the server | failed | Run opencode reload, then check again. |
 | `SERVER_DISABLED` | disabled | Enable slack in /mcps. |
-| `SERVER_NAME_IN_USE` | conflict | Remove mcp.servers.slack from your OpenCode config, or set this plugin's "server" option to another name. |
+| `SERVER_NAME_IN_USE` | conflict | Remove mcp.servers.slack from your OpenCode config. |
 | `OPTIONS_INVALID` | not configured | See [Validation errors](#validation-errors). |
 | `HOST_UNTESTED` | host untested | Use OpenCode >=2.2.3 <2.3.0, or set "allowUntestedHost": true in this plugin's options to run anyway. |
+| none: a shadowed skill | connected | Move or rename the skill at `<path>`, so that this plugin's slack-search skill loads, then run opencode reload. |
+| none: agents without default rules | connected | Put the default rules shown by /slack-status first in each listed agent's own permissions, in opencode.json or the agent's Markdown file, followed by your top-level rules for Slack tools. |
 | `STATUS_UNAVAILABLE` | none: status itself failed | Run /slack-status again in a moment (in the dialog: press r to retry). |
-| `SKILLS_INVALID` | none: the plugin does not load | Reinstall the plugin. A bundled skill is missing or has invalid frontmatter. |
+| `SKILLS_INVALID` | none: the plugin does not load | Run opencode plugin update @joe-broadhead/opencode-slack, then opencode reload. A bundled skill is missing or has invalid frontmatter. |

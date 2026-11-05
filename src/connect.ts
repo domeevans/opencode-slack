@@ -1,5 +1,5 @@
 import type { Plugin } from "@opencode/plugin"
-import { DEFAULT_SERVER } from "./defaults.js"
+import { SERVER } from "./defaults.js"
 import type { Options } from "./options.js"
 
 type Context = Plugin.Context
@@ -20,25 +20,24 @@ export interface ClientState {
 
 const NO_SPACES = /^\S+$/
 
-/** The `/connect` entry that stores a Slack app's client ID for one server name. */
-export const appIntegrationID = (server: string) => `${server}-app`
+/** The `/connect` entry that stores a Slack app's client ID. */
+const APP_INTEGRATION_ID = "slack-app"
 /** The name `/connect` shows for the entry that stores the client ID. */
-export const appDisplayName = (server: string) => (server === DEFAULT_SERVER ? "Slack app" : `Slack app (${server})`)
+export const APP_NAME = "Slack app"
 /** The name `/connect` shows for the Slack MCP server's own integration. */
-export const serverDisplayName = (server: string) => (server === DEFAULT_SERVER ? "Slack" : `Slack (${server})`)
+export const SERVER_DISPLAY_NAME = "Slack"
 
 /**
  * Adds "Slack app" to `/connect`: a key method whose key is the client ID, because OpenCode asks for a non-empty
  * key. The optional secret is a form field, for apps without PKCE. Both are kept in OpenCode's credential store.
  */
-export function registerAppIntegration(integration: Pick<Context["integration"], "transform">, server: string) {
-  const id = appIntegrationID(server)
+export function registerAppIntegration(integration: Pick<Context["integration"], "transform">) {
   return integration.transform((editor) => {
-    editor.update(id, (draft) => {
-      draft.name = appDisplayName(server)
+    editor.update(APP_INTEGRATION_ID, (draft) => {
+      draft.name = APP_NAME
     })
     editor.method.update({
-      integrationID: id,
+      integrationID: APP_INTEGRATION_ID,
       method: {
         type: "key",
         label: "Slack app client ID",
@@ -59,7 +58,7 @@ export async function resolveClient(integration: { readonly connection: Pick<Con
   if (options.clientId !== undefined) {
     return { client: { id: options.clientId, ...(options.clientSecret === undefined ? {} : { secret: options.clientSecret }), source: "options" }, invalid: false }
   }
-  const integrationID = appIntegrationID(options.server)
+  const integrationID = APP_INTEGRATION_ID
   const connection = await integration.connection.active(integrationID)
   const stored = connection === undefined ? undefined : await integration.connection.resolve(connection)
   if (connection !== undefined && stored?.type === "key") {
@@ -85,15 +84,15 @@ export const sameClient = (a: ClientState, b: ClientState) => JSON.stringify(a) 
  * and again on every MCP reload, naming it after the server; so the rename is registered again whenever the name
  * has reverted, to run after OpenCode's own transform.
  */
-export function serverNamer(ctx: Pick<Context, "mcp" | "integration">, server: string, owned: () => boolean) {
+export function serverNamer(ctx: Pick<Context, "mcp" | "integration">, owned: () => boolean) {
   let registration: Registration | undefined
   return {
     /** True once the integration carries the display name. */
     async apply(): Promise<boolean> {
       if (!owned()) return false
-      const id = (await ctx.mcp.list()).data.find((item) => item.name === server)?.integrationID
+      const id = (await ctx.mcp.list()).data.find((item) => item.name === SERVER)?.integrationID
       if (id === undefined) return false
-      const name = serverDisplayName(server)
+      const name = SERVER_DISPLAY_NAME
       if ((await ctx.integration.get({ integrationID: id })).data.name === name) return true
       const previous = registration
       registration = await ctx.integration.transform((editor) => {

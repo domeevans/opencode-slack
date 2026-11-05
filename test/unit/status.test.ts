@@ -10,9 +10,9 @@ const OK = parseOptions({ oauth: { client_id: "C1" } })
 const SECRET = "zz-client-secret-7c1e"
 const C1: ClientState = { client: { id: "C1", source: "options" }, invalid: false }
 const CONFIDENTIAL: ClientState = { client: { id: "C1", secret: SECRET, source: "connect" }, invalid: false }
-const INVALID = parseOptions({ oauth: { redirect_port: 8765 } })
+const INVALID = parseOptions({ oauth: { bogus: 1 } })
 
-const guarded = (server = "slack"): Rule[] => [BASE_ALLOW, ...defaultRules(server), ...BASE_RULES.slice(1)]
+const guarded = (): Rule[] => [BASE_ALLOW, ...defaultRules(), ...BASE_RULES.slice(1)]
 const deny = (action: string): Rule => ({ action, resource: "*", effect: "deny" })
 const allow = (action: string): Rule => ({ action, resource: "*", effect: "allow" })
 
@@ -29,12 +29,14 @@ function input(overrides: Partial<StatusInput> = {}): StatusInput {
     servers: [{ name: "slack", status: { status: "connected" } }],
     tools: [],
     agents: [{ id: "build", permissions: guarded() }],
+    shadowedSkills: [],
     ...overrides,
   }
 }
 
 const SIGN_IN = "Run /connect and choose Slack, then press o or Enter to open the sign-in page (in a terminal, opencode mcp auth slack opens the browser automatically)."
 const NO_CLIENT_NEXT = "Run /connect and choose Slack app, then paste your Slack app's client ID."
+const AGENT_FIX = "Put the default rules shown by /slack-status first in each listed agent's own permissions, in opencode.json or the agent's Markdown file, followed by your top-level rules for Slack tools."
 
 // Every state and error code, with the exact message and next step each surface shows.
 const STATES: readonly (readonly [string, StatusInput, Pick<Status, "state" | "code" | "message" | "nextStep" | "detail">])[] = [
@@ -47,14 +49,14 @@ const STATES: readonly (readonly [string, StatusInput, Pick<Status, "state" | "c
   ["an untested host with invalid options", input({ hostVersion: "0.0.0-dev-1", hostSupported: false, hostTested: false, active: false, parsed: INVALID }), {
     state: "not_configured",
     code: "OPTIONS_INVALID",
-    message: "Option oauth.redirect_port: This option is not supported.",
-    nextStep: "Use oauth.redirect_uri instead, for example http://localhost:8765/callback.",
+    message: "Option oauth.bogus: This option is not supported.",
+    nextStep: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
   }],
   ["invalid options", input({ parsed: INVALID, active: false }), {
     state: "not_configured",
     code: "OPTIONS_INVALID",
-    message: "Option oauth.redirect_port: This option is not supported.",
-    nextStep: "Use oauth.redirect_uri instead, for example http://localhost:8765/callback.",
+    message: "Option oauth.bogus: This option is not supported.",
+    nextStep: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
   }],
   ["no client ID", input({ client: { invalid: false } }), {
     state: "not_configured",
@@ -72,7 +74,7 @@ const STATES: readonly (readonly [string, StatusInput, Pick<Status, "state" | "c
     state: "conflict",
     code: "SERVER_NAME_IN_USE",
     message: 'Another MCP server is already named "slack", so Slack was not added.',
-    nextStep: 'Remove mcp.servers.slack from your OpenCode config, or set this plugin\'s "server" option to another name.',
+    nextStep: "Remove mcp.servers.slack from your OpenCode config.",
   }],
   ["a server the host does not list", input({ servers: [] }), {
     state: "failed",
@@ -132,13 +134,13 @@ describe("buildStatus states", () => {
   })
 
   test("an untested host the user allowed, with invalid options, reports the options, not the allowance", () => {
-    const parsed = parseOptions({ allowUntestedHost: true, oauth: { client_id: "C1", redirect_port: 8765 } })
+    const parsed = parseOptions({ allowUntestedHost: true, oauth: { client_id: "C1", bogus: 1 } })
     const status = buildStatus(input({ hostVersion: "2.3.0", hostSupported: false, hostTested: false, active: false, parsed }))
     expect(status).toMatchObject({
       state: "not_configured",
       code: "OPTIONS_INVALID",
-      message: "Option oauth.redirect_port: This option is not supported.",
-      nextStep: "Use oauth.redirect_uri instead, for example http://localhost:8765/callback.",
+      message: "Option oauth.bogus: This option is not supported.",
+      nextStep: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
       host: { version: "2.3.0", range: ">=2.2.3 <2.3.0", tested: false },
     })
     expect(formatStatus(status)).not.toContain("allowUntestedHost")
@@ -181,18 +183,6 @@ describe("buildStatus states", () => {
     expect(shortReason("  \n ")).toBeUndefined()
     expect(shortReason("ECONNREFUSED: Unable to connect.")).toBe("ECONNREFUSED: Unable to connect")
     expect(Object.keys(buildStatus(input({ servers: [{ name: "slack", status: { status: "failed", error: "" } }] })))).not.toContain("detail")
-  })
-
-  test("the connection is read from the configured server name", () => {
-    const parsed = parseOptions({ oauth: { client_id: "C1" }, server: "work-slack" })
-    const status = buildStatus(input({
-      parsed,
-      servers: [{ name: "slack", status: { status: "connected" } }, { name: "work-slack", status: { status: "disabled" } }],
-      agents: [{ id: "build", permissions: guarded("work-slack") }],
-    }))
-    expect(status.server).toEqual({ name: "work-slack", url: "https://mcp.slack.com/mcp" })
-    expect(status.state).toBe("disabled")
-    expect(status.nextStep).toBe("Enable work-slack in /mcps.")
   })
 })
 
@@ -291,17 +281,11 @@ describe("unguarded agents", () => {
     { id: "custom", permissions: [...BASE_RULES] },
     { id: "loose", permissions: [...guarded(), allow("slack_*")] },
     { id: "reopened", permissions: [...guarded(), BASE_ALLOW] },
-    { id: "fixed", permissions: [...BASE_RULES, deny("slack_slack_search_public"), ...defaultRules("slack"), deny("slack_slack_search_public")] },
+    { id: "fixed", permissions: [...BASE_RULES, deny("slack_slack_search_public"), ...defaultRules(), deny("slack_slack_search_public")] },
   ]
 
   test("names agents that would run an unknown Slack tool without asking", () => {
     expect(buildStatus(input({ agents })).unguardedAgents).toEqual(["custom", "loose", "reopened"])
-  })
-
-  test("checks against the configured server name", () => {
-    const parsed = parseOptions({ oauth: { client_id: "C1" }, server: "work-slack" })
-    const status = buildStatus(input({ parsed, servers: [{ name: "work-slack", status: { status: "connected" } }], agents }))
-    expect(status.unguardedAgents).toEqual(["build", "custom", "loose", "reopened", "fixed"])
   })
 
   test("is empty when the plugin registered nothing", () => {
@@ -309,26 +293,21 @@ describe("unguarded agents", () => {
     expect(buildStatus(input({ agents, hostSupported: false, hostTested: false, active: false })).unguardedAgents).toEqual([])
   })
 
-  test("the next step names them once connected", () => {
-    expect(buildStatus(input({ agents })).nextStep).toBe(
-      'Put the default Slack rules shown under "Agents without default rules" first in each of these agents\' own permissions (agents.<name>.permissions), so they ask before Slack writes: custom, loose, reopened.',
-    )
+  test("the next step is the one fixed sentence every plugin uses, naming /slack-status", () => {
+    expect(buildStatus(input({ agents })).nextStep).toBe(AGENT_FIX)
   })
 
-  test("the fix puts the plugin's block in each agent's own permissions, never the top level", () => {
-    const rows = statusRows(buildStatus(input({ agents: [{ id: "custom", permissions: [...BASE_RULES] }] })))
-    const row = rows.find((item) => item.label === "Agents without default rules")
-    expect(row?.value).toStartWith("These agents run Slack writes and unknown tools without asking: custom. ")
-    expect(row?.value).toContain(`put these rules first in each agent's own "permissions" list (agents.<name>.permissions): `)
-    expect(row?.value).toContain("Follow them with your top-level rules for slack_ actions, so yours keep winning.")
-    expect(row?.value).toEndWith('Do not add them to the top-level "permissions": there they would loosen stricter agents such as explore.')
-    const block = /: (\[.*\])\. Follow/.exec(row?.value ?? "")?.[1]
-    expect(JSON.parse(block ?? "null")).toEqual(defaultRules("slack"))
+  test("the row lists the names only, then the plugin's block to paste, one rule per line", () => {
+    const row = statusRows(buildStatus(input({ agents }))).find((item) => item.label === "Agents without default rules")
+    const [names, ...block] = (row?.value ?? "").split("\n")
+    expect(names).toBe("custom, loose, reopened")
+    expect(JSON.parse(block.join("\n"))).toEqual(defaultRules())
+    expect(block.slice(1, -1).every((line) => line.startsWith('  { "action": '))).toBe(true)
   })
 
   test("following the fix guards the agent", () => {
     // The user's own top-level rule for a Slack tool, then the plugin's block, then that rule repeated, as the fix says.
-    const fixed = [...BASE_RULES, deny("slack_slack_search_public"), ...defaultRules("slack"), deny("slack_slack_search_public")]
+    const fixed = [...BASE_RULES, deny("slack_slack_search_public"), ...defaultRules(), deny("slack_slack_search_public")]
     expect(buildStatus(input({ agents: [{ id: "custom", permissions: fixed }] })).unguardedAgents).toEqual([])
   })
 
@@ -341,6 +320,27 @@ describe("unguarded agents", () => {
     const asks = [BASE_ALLOW, { action: "*", resource: "*", effect: "ask" } as Rule]
     const denies = [BASE_ALLOW, deny("slack_*")]
     expect(buildStatus(input({ agents: [{ id: "probe", permissions: asks }, { id: "quiet", permissions: denies }] })).unguardedAgents).toEqual([])
+  })
+})
+
+describe("a shadowed skill", () => {
+  const shadowed = [{ id: "slack-search", path: "/home/u/.config/opencode/skills/slack-search/SKILL.md" }]
+  const MOVE = "Move or rename the skill at /home/u/.config/opencode/skills/slack-search/SKILL.md, so that this plugin's slack-search skill loads, then run opencode reload."
+
+  test("connected: the Skills row names the file, and the next step moves it", () => {
+    const status = buildStatus(input({ shadowedSkills: shadowed }))
+    expect(status).toMatchObject({ state: "connected", shadowedSkills: shadowed, nextStep: MOVE })
+    expect(statusRows(status).find((row) => row.label === "Skills")?.value)
+      .toBe("slack-search is shadowed by /home/u/.config/opencode/skills/slack-search/SKILL.md, so agents load that file instead of this plugin's skill")
+  })
+
+  test("unguarded agents come first, and a connection problem before both", () => {
+    expect(buildStatus(input({ shadowedSkills: shadowed, agents: [{ id: "custom", permissions: [...BASE_RULES] }] })).nextStep).toBe(AGENT_FIX)
+    expect(buildStatus(input({ shadowedSkills: shadowed, servers: [] })).nextStep).toBe("Run opencode reload, then check again.")
+  })
+
+  test("no Skills row when nothing is shadowed", () => {
+    expect(statusRows(buildStatus(input())).map((row) => row.label)).not.toContain("Skills")
   })
 })
 
@@ -386,7 +386,7 @@ describe("formatStatus", () => {
     expect(lines[0]).toBe("Slack")
     expect(lines[1]).toBe(`Connection: ${stateLabel(status)}. ${status.code === undefined ? "" : `${status.code}: `}${status.message}${status.detail === undefined ? "" : ` ${status.detail}`}`)
     const labels = lines.slice(1).map((line) => line.slice(0, line.indexOf(":")))
-    const order = ["Connection", "Account", "Access", "Server", "Client", "Callback", "Scopes", "Tools", "Agents without default rules", "OpenCode", "Next step"]
+    const order = ["Connection", "Account", "Access", "Server", "Client", "Callback", "Scopes", "Skills", "Tools", "Agents without default rules", "OpenCode", "Next step"]
     expect(labels).toEqual(order.filter((label) => labels.includes(label)))
     // The shared rows are always there, with "none" where there is nothing to show.
     for (const label of ["Connection", "Account", "Access", "Tools", "Agents without default rules", "OpenCode", "Next step"]) expect(labels).toContain(label)
@@ -397,11 +397,6 @@ describe("formatStatus", () => {
 
   test("a confidential client from /connect says a secret is set and where it was saved", () => {
     expect(formatStatus(buildStatus(input({ client: CONFIDENTIAL })))).toContain("Client: C1 (confidential, secret set; saved in /connect)")
-  })
-
-  test("the allow example uses the configured server name", () => {
-    const parsed = parseOptions({ oauth: { client_id: "C1" }, server: "work-slack" })
-    expect(formatStatus(buildStatus(input({ parsed })))).toContain('{ "action": "work-slack_slack_read_file", "resource": "*", "effect": "allow" }')
   })
 })
 

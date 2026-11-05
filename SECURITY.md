@@ -16,7 +16,7 @@ The plugin is configuration and status code. It makes no network requests, defin
 
 - adds Slack's hosted MCP server, `https://mcp.slack.com/mcp`, to OpenCode with your Slack app's OAuth client;
 - without `oauth.client_id` in its options, adds **Slack app** to `/connect` and reads that entry (the client ID and an optional client secret) from OpenCode's credential store;
-- adds default `ask` permission rules to each agent;
+- adds the default rules to each agent: Slack tools ask, and the known reads are allowed;
 - registers `/slack-status`, the status RPC, the tools RPC for scripts, the TUI `/slack` dialog and the `slack-search` skill.
 
 OpenCode does everything else. It connects to Slack over HTTPS, runs the OAuth sign-in (PKCE for public apps), stores the credential outside your project config, refreshes it, and asks before tool calls according to your permission rules. `opencode mcp logout slack` deletes the Slack sign-in, and `opencode auth logout slack-app` deletes the saved client.
@@ -30,7 +30,7 @@ The client ID is public. A client secret is needed only for apps without PKCE. G
 - **On your machine:** OpenCode keeps session history, including Slack results. When a tool result exceeds the output limit (by default 2,000 lines or 50 KiB), OpenCode shortens it for the model and saves the full text locally.
 - **At Slack:** Slack records MCP activity in its [audit logs](https://docs.slack.dev/reference/audit-logs-api/methods-actions-reference#mcp-server), which workspace admins can review.
 
-Your Slack token acts as you. Agents can reach everything that you can see and that the granted scopes allow. The default scopes are read-only and cover public channels and user profiles. Add more scopes only when you need them.
+Your Slack token acts as you. Agents can reach everything that you can see and that the granted scopes allow. The default scopes are read-only and cover public channels and user profiles. Add more scopes only when you need them: with private-history scopes, the read tools read private channels and direct messages without asking (see the README's [Permissions](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/README.md#permissions)).
 
 ### Slack content is untrusted
 

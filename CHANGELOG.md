@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.5] - 2026-11-05
+
+### Added
+
+- Status names a skill of yours with the id `slack-search`, from your own or the project's skill folders, which OpenCode loads instead of the plugin's. The `Skills` row shows its file, the next step says to move or rename it, and the status RPC carries it in `shadowedSkills`.
+- `npm run drift`, for contributors: compares Slack's live read tool schemas with the snapshot the tests use.
+
+### Changed
+
+- The `slack-search` skill now covers what agents got wrong. Results are Markdown text, not JSON. `include_context: false` keeps results small, and `response_format: "concise"` drops permalinks. Dates belong in `query`, because Slack ignores an ISO date in `after` and `before`. The skill also covers finding a thread's parent, reading canvases, citing thread replies, and stopping at a rate limit. Reading DMs needs your consent, and private search fails with the default scopes. Writes ask first. Scripts and cron jobs read Slack through the tools RPC, never with a Slack token. The skill now also triggers for posting to Slack and for scripts.
+- Code Mode's description of the `slack` namespace says that results are Markdown text, that scripts use `opencode api post /api/rpc/slack.workspace.tools/<tool>` instead of a Slack token, and that the `slack-search` skill covers searching and citing.
+- With agents that lack the default rules, the next step is now the same sentence in every plugin of this family: "Put the default rules shown by /slack-status first in each listed agent's own permissions, in opencode.json or the agent's Markdown file, followed by your top-level rules for Slack tools." The `Agents without default rules` row lists the agents' names, then the rules to paste, one per line. The status RPC still lists the names in `unguardedAgents`.
+- `SKILLS_INVALID` now says to run `opencode plugin update @joe-broadhead/opencode-slack`, then `opencode reload`.
+- `oauth.redirect_port` gets the same next step as any other unknown `oauth` key. Use `oauth.redirect_uri`.
+- The tools RPC follows the shared module's v4: a refusal by a deny rule names the denied action and the agent, and says to remove or narrow that rule.
+- The Jelly summary now names everything that asks first: "writes, private search and file reads".
+- The docs say that, once you add private-history scopes, the read tools read private channels and direct messages without asking, and show how to make those reads ask.
+
+### Removed
+
+- The `server` option. The MCP server is always named `slack`, so tool names and permission actions are always `slack_<tool>`, and the `/connect` entry is always **Slack app**. If you set `server`, remove it: status reports it as `OPTIONS_INVALID`. If your own config defines `mcp.servers.slack`, remove that entry so the plugin can add its own: status reports `SERVER_NAME_IN_USE`, and the tools RPC reports `SERVER_CONFLICT`.
+
 ## [0.0.4] - 2026-11-04
 
 ### Added

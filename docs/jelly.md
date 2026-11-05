@@ -36,7 +36,7 @@ skill ids collide with another plugin's or the agent's own.
 
 ## Views
 
-None yet.
+None.
 
 ## Signing in
 

@@ -43,7 +43,7 @@ export function tempDirectory(prefix: string, repository = false): string {
 
 type Client = Pick<OpenCodeClient, "agent" | "command" | "integration" | "mcp" | "permission" | "plugin" | "rpc" | "session" | "skill">
 
-const PROJECTS = ["defaults", "rules", "collision", "invalid", "connect", "hosted"] as const
+const PROJECTS = ["defaults", "rules", "collision", "invalid", "connect", "hosted", "shadowed"] as const
 export type Project = (typeof PROJECTS)[number]
 
 export interface Host {
@@ -65,6 +65,9 @@ const deny = rule("deny")
 
 /** The https redirect and listener port the "hosted" project sets. */
 export const HOSTED_OAUTH = { redirect_uri: "https://host.example/oauth/return", callback_port: 49231 } as const
+
+/** The project skill the "shadowed" project holds under the bundled skill's id. */
+export const SHADOWING_SKILL = join("projects", "shadowed", ".opencode", "skills", "slack-search", "SKILL.md")
 
 /** A server the user configured under the plugin's default name. */
 export const USER_SERVER = { type: "remote", url: "https://mcp.example.invalid/mcp", oauth: false } as const
@@ -97,7 +100,7 @@ function projectConfig(project: Project, plugin: string, callLog: string): objec
           custom: configOnly("Defined only in user config"),
           locked: configOnly("Denies everything", [deny("*")]),
           // The fix /slack-status gives for an agent defined only in user config.
-          fixed: configOnly("Has the default Slack rules", defaultRules("slack")),
+          fixed: configOnly("Has the default Slack rules", defaultRules()),
         },
       }
     case "rules":
@@ -108,16 +111,19 @@ function projectConfig(project: Project, plugin: string, callLog: string): objec
         agents: {
           custom: configOnly("Defined only in user config"),
           // The fix, followed by the user's own top-level Slack rules so they keep winning.
-          fixed: configOnly("Has the default Slack rules", [...defaultRules("slack"), allow("slack_slack_send_message"), deny("slack_slack_search_public")]),
+          fixed: configOnly("Has the default Slack rules", [...defaultRules(), allow("slack_slack_send_message"), deny("slack_slack_search_public")]),
         },
       }
     case "collision":
       return { ...LOCAL_PROVIDERS_OFF, plugins: [configured, probe({})], mcp: { servers: { slack: USER_SERVER } } }
     case "invalid":
-      return { ...LOCAL_PROVIDERS_OFF, plugins: [slack(plugin, { oauth: { client_id: CLIENT_ID, redirect_port: 8765 } }), probe({})] }
+      return { ...LOCAL_PROVIDERS_OFF, plugins: [slack(plugin, { oauth: { client_id: CLIENT_ID, bogus: 1 } }), probe({})] }
     case "connect":
       // No client ID in the options: it comes from the /connect Slack app entry.
       return { ...LOCAL_PROVIDERS_OFF, plugins: [slack(plugin, {}), probe({})] }
+    case "shadowed":
+      // The project's own skill under the bundled skill's id, which OpenCode loads instead.
+      return { ...LOCAL_PROVIDERS_OFF, plugins: [configured, probe({})] }
     case "hosted":
       // A hosted return address, which a proxy forwards to OpenCode's listener on the callback port.
       return { ...LOCAL_PROVIDERS_OFF, plugins: [slack(plugin, { oauth: { client_id: CLIENT_ID, ...HOSTED_OAUTH } }), probe({})] }
@@ -164,6 +170,9 @@ function makeRoot(label: string, plugin: string): Root {
     mkdirSync(directory(project), { recursive: true })
     writeFileSync(join(directory(project), "opencode.jsonc"), JSON.stringify(projectConfig(project, plugin, callLog), null, 2))
   }
+  const shadow = join(directory("shadowed"), ".opencode", "skills", "slack-search")
+  mkdirSync(shadow, { recursive: true })
+  writeFileSync(join(shadow, "SKILL.md"), "---\nname: slack-search\ndescription: A project's own skill under the bundled id.\n---\n\nProject skill.\n")
   return { path, callLog, env, directory, remove: () => rmSync(path, { recursive: true, force: true }) }
 }
 

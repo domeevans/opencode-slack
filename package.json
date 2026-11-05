@@ -1,6 +1,6 @@
 {
   "name": "@joe-broadhead/opencode-slack",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Unofficial OpenCode plugin for Slack",
   "keywords": [
     "opencode",
@@ -39,6 +39,7 @@
     "test:tui": "bun test test/tui",
     "test:host": "bun test test/host",
     "test:pack": "bun test test/pack",
+    "drift": "bun scripts/drift.ts",
     "check": "npm run typecheck && npm run build && npm test && npm run test:tui && npm run test:host && npm run test:pack"
   },
   "devDependencies": {
@@ -59,7 +60,7 @@
   },
   "jelly": {
     "title": "Slack",
-    "summary": "Search and read Slack; anything that sends asks first.",
+    "summary": "Search and read Slack; writes, private search and file reads ask first.",
     "icon": "assets/icon.svg",
     "tools": [
       {

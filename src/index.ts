@@ -1,4 +1,5 @@
 import { Plugin } from "@opencode/plugin"
+import { SERVER } from "./defaults.js"
 import { registerAppIntegration, resolveClient, sameClient, serverNamer, type ClientState } from "./connect.js"
 import { isSupportedHost, isTestedHost } from "./host-version.js"
 import { registerToolsRpc } from "./host/tools-rpc.js"
@@ -7,7 +8,7 @@ import { insertDefaultRules } from "./permissions.js"
 import { SlackRpc } from "./rpc.js"
 import { registerServer } from "./server.js"
 import { NAMESPACE_DESCRIPTION } from "./tools.js"
-import { loadSkills } from "./skills.js"
+import { loadSkills, shadowedSkills, type ListedSkill } from "./skills.js"
 import { buildStatus, clientNextStep, formatStatus, UNAVAILABLE } from "./status.js"
 import { VERSION } from "./version.js"
 
@@ -52,25 +53,27 @@ export default Plugin.define({
     const stopped = new AbortController()
     let nameInUse = false
     let client: ClientState = { invalid: false }
+    let bundled: readonly ListedSkill[] = []
     let cleanup = async () => {}
 
     if (options !== undefined) {
       const fromConnect = options.clientId === undefined
-      if (fromConnect) await registerAppIntegration(ctx.integration, options.server)
+      if (fromConnect) await registerAppIntegration(ctx.integration)
       client = await resolveClient(ctx.integration, options).catch(() => client)
       await ctx.mcp.transform((editor) => {
         nameInUse = !registerServer(editor, options, client.client)
       })
       // Code Mode's catalog describes the server's namespace with this text.
-      await ctx.tool.transform((editor) => editor.namespace({ name: options.server, description: NAMESPACE_DESCRIPTION }))
-      await ctx.agent.transform((editor) => insertDefaultRules(editor, options.server))
+      await ctx.tool.transform((editor) => editor.namespace({ name: SERVER, description: NAMESPACE_DESCRIPTION }))
+      await ctx.agent.transform((editor) => insertDefaultRules(editor))
       const skills = await loadSkills()
+      bundled = skills
       await ctx.skill.transform((editor) => {
         for (const skill of skills) editor.add(skill)
       })
 
       // Only a server this plugin added is renamed, never one from the user's config.
-      const namer = serverNamer(ctx, options.server, () => !nameInUse && client.client !== undefined)
+      const namer = serverNamer(ctx, () => !nameInUse && client.client !== undefined)
       // A client saved, switched or removed in `/connect` applies without a restart.
       const updateClient = async () => {
         const next = await resolveClient(ctx.integration, options)
@@ -119,6 +122,8 @@ export default Plugin.define({
       servers: (await ctx.mcp.list()).data,
       tools: await ctx.tool.list(),
       agents: (await ctx.agent.list()).data,
+      // A skill list the host cannot give reports nothing shadowed, rather than failing status.
+      shadowedSkills: bundled.length === 0 ? [] : shadowedSkills(await ctx.skill.list().then((listed) => listed.data, () => []), bundled),
     })
 
     await ctx.rpc.register(SlackRpc, {
@@ -139,11 +144,11 @@ export default Plugin.define({
       ? async () => {}
       : await registerToolsRpc(ctx, {
         mcp: {
-          server: options.server,
+          server: SERVER,
           managed: () => !nameInUse,
           notRegistered: () => client.client !== undefined
             ? undefined
-            : { code: client.invalid ? "CLIENT_ID_INVALID" : "CLIENT_ID_MISSING", next: clientNextStep(options.server) },
+            : { code: client.invalid ? "CLIENT_ID_INVALID" : "CLIENT_ID_MISSING", next: clientNextStep() },
         },
       })
 

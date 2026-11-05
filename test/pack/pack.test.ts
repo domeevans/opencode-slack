@@ -201,7 +201,7 @@ describe.each(HOST_VERSIONS)("the installed package on stock opencode %s", (vers
         url: "https://mcp.slack.com/mcp",
         oauth: { client_id: CLIENT_ID, redirect_uri: "http://localhost:8765/callback", scope: "channels:history channels:read search:read.public users:read" },
       })
-      const rules = defaultRules("slack")
+      const rules = defaultRules()
       const build = state.agents.find((agent) => agent.id === "build")
       const at = build?.permissions.findIndex((rule) => rule.action === "*" && rule.resource === "*" && rule.effect === "allow") ?? -1
       expect(build?.permissions.slice(at + 1, at + 1 + rules.length)).toEqual(rules)

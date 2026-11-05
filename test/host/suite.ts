@@ -9,7 +9,7 @@ import type { Status } from "../../src/status.js"
 import { KNOWN_READS, TOOLS_RPC_ID } from "../../src/host/tools-rpc.js"
 import { classify } from "../../src/tools.js"
 import { fakeInput, FAKE_TOOLS, UPSTREAM_FAILURE } from "./fake-slack-mcp.js"
-import { CLIENT_ID, HOSTED_OAUTH, REPO, repositoryChanges, TEMP, USER_SERVER, type Host, type Project } from "./harness.js"
+import { CLIENT_ID, HOSTED_OAUTH, REPO, repositoryChanges, SHADOWING_SKILL, TEMP, USER_SERVER, type Host, type Project } from "./harness.js"
 import type { Outcome } from "./probe/index.js"
 
 interface ProbeState {
@@ -90,6 +90,8 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
           version: PACKAGE_VERSION,
           host: { version: host.version, range: ">=2.2.3 <2.3.0", tested: true },
           client: { id: CLIENT_ID, mode: "public_pkce" },
+          // OpenCode lists the bundled skill under the path the plugin gave, so it is not reported as shadowed.
+          shadowedSkills: [],
         })
         expect(Object.hasOwn(current, "code")).toBe(false)
       })
@@ -99,7 +101,7 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         const text = await slashStatus("defaults")
         expect(text).toStartWith("Slack\nConnection: connected. ")
         expect(text).toContain(`Client: ${CLIENT_ID} (public, PKCE; set in plugin options)`)
-        expect(text).toContain("Agents without default rules: These agents run Slack writes and unknown tools without asking: custom.")
+        expect(text).toContain('Agents without default rules: custom\n[\n  { "action": "slack_*", "resource": "*", "effect": "ask" },')
         expect(text).toContain(`OpenCode: ${host.version} (tested; supported range >=2.2.3 <2.3.0)`)
       })
 
@@ -114,8 +116,8 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         for (const agent of agents) {
           const at = agent.permissions.findIndex(isBaseAllow)
           if (at === -1 || CONFIG_ONLY.includes(agent.id)) continue
-          expect({ agent: agent.id, rules: agent.permissions.slice(at + 1, at + 1 + defaultRules("slack").length) })
-            .toEqual({ agent: agent.id, rules: defaultRules("slack") })
+          expect({ agent: agent.id, rules: agent.permissions.slice(at + 1, at + 1 + defaultRules().length) })
+            .toEqual({ agent: agent.id, rules: defaultRules() })
         }
         for (const id of CONFIG_ONLY) expect({ id, catchAlls: catchAlls(agents.find((agent) => agent.id === id)!.permissions) }).toEqual({ id, catchAlls: id === "fixed" ? 1 : 0 })
       })
@@ -328,13 +330,25 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
       })
     })
 
+    describe("a project skill with the bundled skill's id", () => {
+      test("wins in OpenCode, and status names its file", async () => {
+        const path = join(host.root, SHADOWING_SKILL)
+        // Status waits for the project to load; the skill list does not.
+        await status("shadowed")
+        const listed = (await host.client.skill.list(at("shadowed"))).data.filter((skill) => skill.id === "slack-search")
+        expect(listed.map((skill) => skill.path)).toEqual([path])
+        expect(await status("shadowed")).toMatchObject({ shadowedSkills: [{ id: "slack-search", path }] })
+        expect(await slashStatus("shadowed")).toContain(`Skills: slack-search is shadowed by ${path}, `)
+      })
+    })
+
     describe("invalid options", () => {
       test("register only the status surfaces, which name the option and the fix", async () => {
         expect(await status("invalid")).toMatchObject({
           state: "not_configured",
           code: "OPTIONS_INVALID",
-          message: "Option oauth.redirect_port: This option is not supported.",
-          nextStep: "Use oauth.redirect_uri instead, for example http://localhost:8765/callback.",
+          message: "Option oauth.bogus: This option is not supported.",
+          nextStep: "Remove it. Supported oauth options: client_id, redirect_uri, callback_port, scopes, client_secret.",
         })
         const plugins = (await host.client.plugin.list(at("invalid"))).data
         expect(plugins.find((plugin) => plugin.id === "slack.workspace")?.state).toEqual({ status: "active" })

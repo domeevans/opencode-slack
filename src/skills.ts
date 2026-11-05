@@ -34,11 +34,27 @@ export async function loadSkills(root = new URL("../skills/", import.meta.url)):
   for (const id of SKILLS) {
     const path = fileURLToPath(new URL(`${id}/SKILL.md`, root))
     const text = await readFile(path, "utf8").catch(() => {
-      throw new Error(`SKILLS_INVALID: Bundled skill ${id} is missing. Next step: Reinstall the plugin.`)
+      throw new Error(`SKILLS_INVALID: Bundled skill ${id} is missing. Next step: Run opencode plugin update @joe-broadhead/opencode-slack, then opencode reload.`)
     })
     const skill = parseSkill(id, path, text)
-    if (skill === undefined) throw new Error(`SKILLS_INVALID: Bundled skill ${id} has invalid frontmatter. Next step: Reinstall the plugin.`)
+    if (skill === undefined) throw new Error(`SKILLS_INVALID: Bundled skill ${id} has invalid frontmatter. Next step: Run opencode plugin update @joe-broadhead/opencode-slack, then opencode reload.`)
     skills.push(skill)
   }
   return skills
+}
+
+/** A skill as OpenCode lists it: its id and the file it was read from. */
+export interface ListedSkill {
+  readonly id: string
+  readonly path: string
+}
+
+/**
+ * The listed skills that carry a bundled skill's id but come from another file. OpenCode keeps one skill per id, and a
+ * user's or a project's own skill wins, so the bundled one never loads.
+ */
+export function shadowedSkills(listed: readonly ListedSkill[], own: readonly ListedSkill[]): ListedSkill[] {
+  return listed
+    .filter((skill) => own.some((bundled) => bundled.id === skill.id && bundled.path !== skill.path))
+    .map((skill) => ({ id: skill.id, path: skill.path }))
 }

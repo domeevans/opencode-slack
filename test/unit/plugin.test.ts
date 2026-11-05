@@ -53,11 +53,25 @@ describe("setup with a client ID in the options", () => {
     expect(host.skills.map((skill) => skill.id)).toEqual(["slack-search"] as never)
   })
 
-  test("describes the server's Code Mode namespace, under the configured server name", async () => {
+  test("status names a user skill with the bundled skill's id, which OpenCode loads instead, and says to move it", async () => {
+    const path = "/home/someone/.config/opencode/skills/slack-search/SKILL.md"
+    const host = await setUp({ status: { slack: { status: "connected" } }, userSkills: [{ id: "slack-search", path }] })
+    expect(await host.status()).toMatchObject({
+      state: "connected",
+      shadowedSkills: [{ id: "slack-search", path }],
+      nextStep: `Move or rename the skill at ${path}, so that this plugin's slack-search skill loads, then run opencode reload.`,
+    })
+    expect((await host.slashStatus()).text).toContain(`Skills: slack-search is shadowed by ${path}, so agents load that file instead of this plugin's skill`)
+    const own = await setUp({ status: { slack: { status: "connected" } } })
+    expect(await own.status()).toMatchObject({ shadowedSkills: [], nextStep: "Nothing to do." })
+  })
+
+  test("describes the server's Code Mode namespace", async () => {
     expect([...(await setUp()).namespaces.values()]).toEqual([{ name: "slack", description: NAMESPACE_DESCRIPTION }])
-    expect([...(await setUp({ options: { oauth: { client_id: "C1" }, server: "work" } })).namespaces.keys()]).toEqual(["work"])
     expect(NAMESPACE_DESCRIPTION).toContain("untrusted")
-    expect(NAMESPACE_DESCRIPTION.length).toBeLessThan(250)
+    // The one plugin text the model always sees: the result shape, the scripts route and the skill.
+    for (const fact of ["Markdown", "opencode api post /api/rpc/slack.workspace.tools/", "never a Slack token", "slack-search"]) expect(NAMESPACE_DESCRIPTION).toContain(fact)
+    expect(NAMESPACE_DESCRIPTION.length).toBeLessThan(450)
   })
 
   test("the status RPC carries the plugin's version from package.json and the tested host", async () => {
@@ -125,16 +139,8 @@ describe("setup with a client ID in the options", () => {
 
   test("inserts the default rules after the base allow of every agent that has one", async () => {
     const host = await setUp({ agents: [agent("build", BASE_RULES), agent("locked", [{ action: "*", resource: "*", effect: "deny" }])] })
-    expect(host.agents.find((item) => item.id === "build")?.permissions).toEqual([BASE_ALLOW, ...defaultRules("slack"), ...BASE_RULES.slice(1)])
+    expect(host.agents.find((item) => item.id === "build")?.permissions).toEqual([BASE_ALLOW, ...defaultRules(), ...BASE_RULES.slice(1)])
     expect(host.updatedAgents).toEqual(["build"])
-  })
-
-  test("a custom server name is used for the server, the rules and the status", async () => {
-    const host = await setUp({ options: { oauth: { client_id: "C1" }, server: "work-slack" }, status: { "work-slack": { status: "disabled" } } })
-    expect([...host.servers.keys()]).toEqual(["work-slack"])
-    expect(host.agents[0]?.permissions[1]).toEqual({ action: "work-slack_*", resource: "*", effect: "ask" })
-    expect(await host.status()).toMatchObject({ state: "disabled", server: { name: "work-slack" }, nextStep: "Enable work-slack in /mcps." })
-    await until(() => host.integrations.get("mcp_work-slack")?.name === "Slack (work-slack)")
   })
 
   test("a server the user already configured is kept, and status says the name is in use", async () => {
@@ -299,14 +305,6 @@ describe("setup without a client ID in the options", () => {
     await Bun.sleep(20)
     expect(host.calls).not.toContain("mcp.reload")
   })
-
-  test("a custom server name has its own Slack app entry", async () => {
-    const host = await setUp({ options: { server: "work" }, credentials: { "work-app": stored("C9") } })
-    expect(host.integrations.get("work-app")?.name).toBe("Slack app (work)")
-    expect(host.servers.get("work")).toMatchObject({ oauth: { client_id: "C9" } })
-    const status = await setUp({ options: { server: "other" } }).then((other) => other.status())
-    expect(status as object).toMatchObject({ nextStep: "Run /connect and choose Slack app (other), then paste your Slack app's client ID." })
-  })
 })
 
 describe("setup that registers only the status surfaces", () => {
@@ -321,7 +319,7 @@ describe("setup that registers only the status surfaces", () => {
   })
 
   test.each([
-    ["an unknown option", { oauth: { client_id: "C1", redirect_port: 8765 } }, "oauth.redirect_port"],
+    ["an unknown option", { oauth: { client_id: "C1", bogus: 1 } }, "oauth.bogus"],
     ["a secret without a client ID", { oauth: { client_secret: "s" } }, "oauth.client_secret"],
     ["a bad server name", { oauth: { client_id: "C1" }, server: "a.b" }, "server"],
     ["options that are not an object", "slack", "options"],
@@ -343,12 +341,12 @@ describe("setup that registers only the status surfaces", () => {
   })
 
   test("an untested host with allowUntestedHost and invalid options reports the invalid option", async () => {
-    const host = await setUp({ version: "2.3.0", options: { oauth: { redirect_port: 1 }, allowUntestedHost: true } })
+    const host = await setUp({ version: "2.3.0", options: { oauth: { bogus: 1 }, allowUntestedHost: true } })
     expect(host.calls).toEqual(STATUS_ONLY)
     expect(await host.status()).toMatchObject({
       state: "not_configured",
       code: "OPTIONS_INVALID",
-      message: "Option oauth.redirect_port: This option is not supported.",
+      message: "Option oauth.bogus: This option is not supported.",
       host: { version: "2.3.0", tested: false },
     })
     const text = (await host.slashStatus()).text

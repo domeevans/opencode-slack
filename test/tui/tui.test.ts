@@ -38,6 +38,7 @@ function status(overrides: Partial<StatusInput> = {}): Status {
     servers: [{ name: "slack", status: { status: "connected" } }],
     tools: [],
     agents: [],
+    shadowedSkills: [],
     ...overrides,
   })
 }
@@ -53,7 +54,7 @@ const STATES: readonly (readonly [string, Status])[] = [
   ["failed", status({ servers: [{ name: "slack", status: { status: "failed", error: "invalid_auth" } }] })],
   ["conflict", status({ nameInUse: true })],
   ["not_configured (no client ID)", status({ client: { invalid: false } })],
-  ["not_configured (invalid options)", status({ parsed: parseOptions({ oauth: { redirect_port: 1 } }), active: false })],
+  ["not_configured (invalid options)", status({ parsed: parseOptions({ oauth: { bogus: 1 } }), active: false })],
   ["host_untested", status({ hostVersion: "3.0.0", hostSupported: false, hostTested: false, active: false })],
 ]
 
@@ -217,6 +218,21 @@ describe("the dialog", () => {
     expect(lines.at(-1)).toBe("r refresh · esc close")
     expect(lines.filter((line) => line.startsWith("Client "))).toEqual(value.client === undefined ? [] : ["Client TEST_CLIENT_ID (public, PKCE; set in plugin options)"])
     expect(lines.filter((line) => line.startsWith("Callback "))).toEqual(value.callback === undefined ? [] : ["Callback http://localhost:8765/callback (register exactly this URL in the app's Redirect URLs)"])
+  })
+
+  test("an unguarded agent: the row shows its name, then the block to paste, one rule per line; the next step names /slack-status", async () => {
+    const fake = fakeTui()
+    await activate(fake)
+    const frame = await open(fake)
+    const value = status({ agents: [{ id: "custom", permissions: [{ action: "*", resource: "*", effect: "allow" }] }] })
+    fake.calls[0]!.resolve(value)
+    const lines = (await frame()).split("\n").map((line) => line.trimEnd())
+    const row = lines.findIndex((line) => line.startsWith("Agents without default rules "))
+    expect(lines[row]).toBe("Agents without default rules custom")
+    expect(lines[row + 1]?.trim()).toBe("[")
+    expect(lines[row + 2]?.trim()).toBe('{ "action": "slack_*", "resource": "*", "effect": "ask" },')
+    expect(lines.at(-2)).toBe(`Next step ${value.nextStep}`)
+    expect(value.nextStep).toContain("/slack-status")
   })
 
   test("r refreshes and shows the new status", async () => {
