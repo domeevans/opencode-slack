@@ -15,7 +15,7 @@ import { fakeHost } from "./fakes.js"
  */
 
 type Tool = { name: string; permission: string; effect: string; readOnly: boolean }
-type SignIn = { id: string; label: string; integration?: string; server?: string; after?: string; presetBy?: string; help?: { url: string; label: string }; relay?: Record<string, string> }
+type SignIn = { id: string; label: string; integration?: string; server?: string; after?: string; presetBy?: string; hostClient?: { id: string; option: string }; help?: { url: string; label: string }; relay?: Record<string, string> }
 const manifest = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { files: string[]; jelly: { summary: string; icon: string; tools: Tool[]; skills: string[]; signIns: SignIn[] } }
 const jelly = manifest.jelly
 const rules: readonly { action: string; resource: string; effect: string }[] = [{ action: "*", resource: "*", effect: "allow" }, ...defaultRules()]
@@ -77,6 +77,9 @@ describe("the jelly declaration", () => {
     test("declare the Slack app's /connect entry, then the server that waits for it, under the names /connect shows", () => {
       expect(jelly.signIns.length).toBe(2)
       expect(app).toMatchObject({ id: "app", label: APP_NAME, integration: "slack-app" })
+      // A Jelly host's own Slack app goes where presetBy looks, so the step is done there.
+      expect(app?.hostClient).toEqual({ id: "slack", option: "oauth.client_id" })
+      expect(app?.presetBy).toBe("oauth.client_id")
       expect(slack).toEqual({ id: "slack", label: SERVER_DISPLAY_NAME, server: SERVER, after: "app", relay: {} })
     })
 
