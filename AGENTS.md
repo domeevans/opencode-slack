@@ -29,7 +29,7 @@ This repository builds `@joe-broadhead/opencode-slack`, an unofficial OpenCode p
 
 - `npm ci --ignore-scripts`, then `npm run check`. See [CONTRIBUTING.md](CONTRIBUTING.md).
 - Host tests run OpenCode with HOME, `OPENCODE_TEST_HOME`, XDG directories and TMPDIR inside a temporary root, which is a git repository under the system's `/tmp` (never under TMPDIR or HOME), each stock host on its own port, and never call Slack.
-- `test/host/slack-catalog.ts` holds Slack's live tool schemas; the fake server serves them and `test/unit/docs.test.ts` checks every parameter the skill and the docs name against them. Refresh it when Slack changes a tool.
+- `test/host/slack-catalog.ts` holds Slack's live tool schemas; the fake server serves them and `test/unit/docs.test.ts` checks every parameter the skill and the docs name against them. Refresh it when Slack changes a tool; `npm run drift` compares the reads with a live, signed-in OpenCode (manual, not part of `check`).
 - Do not skip, weaken or delete a test to get green.
 
 ## Writing

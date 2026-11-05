@@ -29,6 +29,10 @@ OPENCODE_BIN_2_2_3=/path/to/2.2.3/opencode OPENCODE_BIN_2_2_4=/path/to/2.2.4/ope
 
 `npm install --prefix <dir> --ignore-scripts @opencode/cli@2.2.3` gets one; the binary is `node_modules/@opencode/cli-<os>-<arch>/bin/opencode` in that directory. The tests check each binary's version and that OpenCode's paths stay inside the test's temporary root. Each root is a git repository under the system's `/tmp`, never under `TMPDIR` or your home, so OpenCode cannot pick up your own `.opencode` agents or skills; each stock host listens on its own free port. They never call Slack.
 
+## Checking Slack's tools for drift
+
+`test/host/slack-catalog.ts` holds Slack's tool schemas as OpenCode lists them; the fake server serves them, and the docs test checks every parameter the skill and docs name against them. To compare it with the live server, run OpenCode with Slack signed in, then `npm run drift`. It reads the tools RPC's `describe` (`opencode api post /api/rpc/slack.workspace.tools/describe`) and reports each read tool whose types, allowed values, parameters or required names differ. It covers the reads only, because writes are never methods: check the write signatures with Code Mode's `search({ namespace: "slack" })`. It is not part of `npm run check`.
+
 ## Changing Slack's tool table
 
 `src/tools.ts` classifies Slack's tools. When status names an unknown tool, check it in Slack's MCP documentation and choose its class: `read` for tools that change nothing; `private` for searches across private conversations; `file` for file contents; `write` for anything that creates, changes, sends or uploads. Update `src/tools.ts`, the tests, the tables in `docs/configuration.md` and the README, and `CHANGELOG.md`.

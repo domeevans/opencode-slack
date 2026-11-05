@@ -39,6 +39,7 @@
     "test:tui": "bun test test/tui",
     "test:host": "bun test test/host",
     "test:pack": "bun test test/pack",
+    "drift": "bun scripts/drift.ts",
     "check": "npm run typecheck && npm run build && npm test && npm run test:tui && npm run test:host && npm run test:pack"
   },
   "devDependencies": {
