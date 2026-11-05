@@ -53,10 +53,12 @@ A hit is a fragment, so read around it before you answer:
 
 ## 3. Answer and cite
 
-- **Cite every claim:** put the link of the message it rests on next to each claim. Repeat the link even if it appeared above; "same thread as above" is not a citation.
+- **Cite every claim:** put the link of the message it rests on next to each claim, each bullet of a list of people or decisions included. Repeat the link even if it appeared above; "same thread as above" is not a citation.
 - **Copy a link or build it in code, never type one:** a retyped link breaks silently.
   - A hit's `Permalink` line: copy it exactly (in Code Mode, return it from the code).
   - Any other link, a thread's own link included: build it in your `execute` code from the `Message_ts` or `Message TS` values, and return it beside the fact it supports. Take the workspace host from any permalink.
+  - So return a ready link with every message your code reads. If the answer needs a link your code did not return, run code again to build it rather than writing it yourself.
+  - Paste each link whole. The usual slip is dropping the dot from `thread_ts=` (`thread_ts=1730000000.000100`, never `thread_ts=1730000000000100`): Slack's own links always keep it. Check every `thread_ts=` before you answer.
     ```js
     const host = permalink.match(/^https:\/\/[^/]+/)[0]
     const link = (channel, ts, parentTs) => `${host}/archives/${channel}/p${ts.replace(".", "")}`
