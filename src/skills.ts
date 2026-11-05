@@ -34,10 +34,10 @@ export async function loadSkills(root = new URL("../skills/", import.meta.url)):
   for (const id of SKILLS) {
     const path = fileURLToPath(new URL(`${id}/SKILL.md`, root))
     const text = await readFile(path, "utf8").catch(() => {
-      throw new Error(`SKILLS_INVALID: Bundled skill ${id} is missing. Next step: Reinstall the plugin.`)
+      throw new Error(`SKILLS_INVALID: Bundled skill ${id} is missing. Next step: Run opencode plugin update @joe-broadhead/opencode-slack, then opencode reload.`)
     })
     const skill = parseSkill(id, path, text)
-    if (skill === undefined) throw new Error(`SKILLS_INVALID: Bundled skill ${id} has invalid frontmatter. Next step: Reinstall the plugin.`)
+    if (skill === undefined) throw new Error(`SKILLS_INVALID: Bundled skill ${id} has invalid frontmatter. Next step: Run opencode plugin update @joe-broadhead/opencode-slack, then opencode reload.`)
     skills.push(skill)
   }
   return skills

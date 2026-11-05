@@ -86,12 +86,12 @@ describe("loadSkills", () => {
   })
 
   test("a missing skill means a broken install", async () => {
-    await expect(loadSkills(folder({}))).rejects.toThrow("SKILLS_INVALID: Bundled skill slack-search is missing. Next step: Reinstall the plugin.")
+    await expect(loadSkills(folder({}))).rejects.toThrow("SKILLS_INVALID: Bundled skill slack-search is missing. Next step: Run opencode plugin update @joe-broadhead/opencode-slack, then opencode reload.")
   })
 
   test("bad frontmatter names the skill and the fix", async () => {
     await expect(loadSkills(folder({ "slack-search": "# no frontmatter\n" }))).rejects.toThrow(
-      "SKILLS_INVALID: Bundled skill slack-search has invalid frontmatter. Next step: Reinstall the plugin.",
+      "SKILLS_INVALID: Bundled skill slack-search has invalid frontmatter. Next step: Run opencode plugin update @joe-broadhead/opencode-slack, then opencode reload.",
     )
   })
 })
