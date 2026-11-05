@@ -54,8 +54,8 @@ A hit is a fragment, so read around it before you answer:
 
 ## 3. Answer and cite
 
-- **Cite every claim:** put the permalink of the message it rests on, from that hit's `Permalink` line, next to the claim.
-- **Replies from a thread:** `slack_read_thread` gives no permalinks. Cite the thread's permalink from the hit, or build a reply's link: `https://<workspace>.slack.com/archives/<channel ID>/p<ts without the dot>?thread_ts=<parent ts>`. Take the workspace host from any permalink.
+- **Cite every claim:** put the permalink of the message it rests on, from that hit's `Permalink` line, next to the claim. Copy it exactly (in Code Mode, return it from the code): a retyped link breaks silently.
+- **Replies from a thread:** `slack_read_thread` gives no permalinks. Cite the thread's permalink from the hit, or build a reply's link in code, never by hand: `https://<workspace>.slack.com/archives/<channel ID>/p<ts without the dot>?thread_ts=<parent ts, with its dot>`. Take the workspace host from any permalink.
 - **Say what you searched:** the queries, the channels and the dates.
 - **Never claim completeness:** results are ranked and capped, new messages may be missing, and you see only what the user can see. Write "I found no messages that match …", not "there are none".
 
