@@ -269,7 +269,7 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
       })
 
       test("without a Slack app client ID, refuses with CLIENT_ID_MISSING and /slack-status's next step", async () => {
-        const next = "Run /connect and choose Slack app, then paste your Slack app's client ID."
+        const next = "Run /connect and choose Slack app client ID, then paste your Slack app's client ID."
         expect(await status("connect")).toMatchObject({ code: "CLIENT_ID_MISSING", nextStep: next })
         const refused = await run("unconfigured", "slack_search_public", { query: "q" }, "connect")
         expect(refused).toMatchObject({ type: "failed", code: "CLIENT_ID_MISSING" })
@@ -369,22 +369,22 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         })
         expect(await status("hosted")).toMatchObject({ state: "disabled", callback: HOSTED_OAUTH.redirect_uri, callbackPort: HOSTED_OAUTH.callback_port })
         expect((await host.client.integration.list(at("hosted"))).data.map((item) => item.id)).not.toContain("slack-app")
-        expect(await slashStatus("hosted")).not.toContain("Slack app")
+        expect(await slashStatus("hosted")).not.toContain("Slack app client ID")
       })
     })
 
     describe("a Slack app client ID from /connect", () => {
-      const NEXT = "Run /connect and choose Slack app, then paste your Slack app's client ID."
+      const NEXT = "Run /connect and choose Slack app client ID, then paste your Slack app's client ID."
 
       test("without one, Slack app is listed in /connect and the server is not registered", async () => {
         expect(await status("connect")).toMatchObject({ state: "not_configured", code: "CLIENT_ID_MISSING", nextStep: NEXT })
         expect((await probe("connect")).registered).toBeNull()
         const app = (await host.client.integration.list(at("connect"))).data.find((item) => item.id === "slack-app")
         expect(app).toMatchObject({
-          name: "Slack app",
+          name: "Slack app client ID",
           methods: [{ type: "key", label: "Slack app client ID", form: [{ key: "client_secret", type: "string", title: "Client secret", required: false }] }],
         })
-        // Projects that set the client ID in their options have no Slack app entry.
+        // Projects that set the client ID in their options have no Slack app client ID entry.
         expect((await host.client.integration.list(at("defaults"))).data.map((item) => item.id)).not.toContain("slack-app")
       })
 

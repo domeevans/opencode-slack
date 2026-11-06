@@ -40,7 +40,7 @@ None.
 
 ## Signing in
 
-`jelly.signIns` declares two steps. First `app`: the key integration `slack-app`, your organisation's Slack app client ID, pasted once; the row links to [the app manifest](slack-app-manifest.json). Then `slack`, Slack's MCP server, which signs in with OAuth (`after: "app"`: until the app is in, its row reads After Slack app and offers nothing to press).
+`jelly.signIns` declares two steps. First `app`: the key integration `slack-app`, your organisation's Slack app client ID, pasted once; the row links to [the app manifest](slack-app-manifest.json). Then `slack`, Slack's MCP server, which signs in with OAuth (`after: "app"`: until the app is in, its row reads After Slack app client ID and offers nothing to press).
 
 **`presetBy`.** The `app` step declares `"presetBy": "oauth.client_id"`: a dotted path into the plugin's options. When the options Jelly gives the plugin set that path, for example from a deployment's own Slack app, the step is done: the plugin registers no `slack-app` integration, Jelly shows no row to paste into, and `slack`, which waits for `app`, can start at once, so the person only sees Slack. A Jelly whose sign-in schema lacks `presetBy` refuses this declaration, because that schema accepts no unknown keys.
 
@@ -56,3 +56,5 @@ Jelly folds the declared sign-ins into this plugin's one card, which shows each 
 
 Jelly's curated catalogue pins an exact version. Publish each release under a new version, so a
 review in Jelly can tell the two apart.
+
+The declaration test runs the shared kit, `test/support/jelly-kit.ts`, which checks the declaration and this page against Jelly's plugin authors' standard. `scripts/check-copies.mjs` holds the kit, and the shared part of the tools RPC (`src/host/tools-rpc.ts`), equal to the copy every plugin carries.

@@ -131,7 +131,7 @@ describe("the tools RPC in setup", () => {
   test("without a Slack app client ID, refuses with /slack-status's CLIENT_ID_MISSING and its next step, in calls and describe", async () => {
     const host = await setUp({ options: {}, tools: [] })
     const status = (await host.status()) as { code: string; nextStep: string }
-    expect(status).toMatchObject({ code: "CLIENT_ID_MISSING", nextStep: "Run /connect and choose Slack app, then paste your Slack app's client ID." })
+    expect(status).toMatchObject({ code: "CLIENT_ID_MISSING", nextStep: "Run /connect and choose Slack app client ID, then paste your Slack app's client ID." })
     const refused = (await host.script("slack_search_public", "ses_build", { query: "q" })) as { message: string }
     expect(refused).toMatchObject({ error: "failed", data: { code: "CLIENT_ID_MISSING", next: status.nextStep } })
     expect(refused.message).toBe(`CLIENT_ID_MISSING: the "slack" server is not registered. Next step: ${status.nextStep}`)

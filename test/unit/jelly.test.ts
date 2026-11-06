@@ -1,71 +1,31 @@
 import { describe, expect, test } from "bun:test"
-import { readdirSync, readFileSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { APP_NAME, resolveClient, SERVER_DISPLAY_NAME } from "../../src/connect.js"
 import { SERVER } from "../../src/defaults.js"
 import plugin from "../../src/index.js"
 import { parseOptions } from "../../src/options.js"
 import { defaultRules } from "../../src/permissions.js"
+import { type Declaration, declarationProblems, docProblems, effectFromRules, readPackage } from "../support/jelly-kit.js"
 import { fakeHost } from "./fakes.js"
 
 /**
  * The `jelly` section of package.json, which Jelly reads without loading the plugin. Jelly's agents have no base
  * "allow everything" rule, so this plugin's own default rules never reach them; Jelly writes each declared "ask" or
- * "deny" as that tool's default instead. So each declared effect must be the one these rules give the tool after a
- * base allow, and the declared skills must be the ones the package ships.
+ * "deny" as that tool's default instead. The shared kit checks the declaration against Jelly's plugin authors'
+ * standard; the tests below add what only Slack declares.
  */
 
-type Tool = { name: string; permission: string; effect: string; readOnly: boolean }
 type SignIn = { id: string; label: string; integration?: string; server?: string; after?: string; presetBy?: string; hostClient?: { id: string; option: string }; help?: { url: string; label: string }; relay?: Record<string, string> }
-const manifest = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { files: string[]; jelly: { summary: string; icon: string; tools: Tool[]; skills: string[]; signIns: SignIn[] } }
-const jelly = manifest.jelly
-const rules: readonly { action: string; resource: string; effect: string }[] = [{ action: "*", resource: "*", effect: "allow" }, ...defaultRules()]
-const wildcard = (pattern: string) => new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replaceAll("*", ".*")}$`)
-const effectOf = (action: string) => [...rules].reverse().find((rule) => wildcard(rule.action).test(action) && rule.resource === "*")?.effect
+const ROOT = new URL("../../", import.meta.url)
+const jelly = readPackage(ROOT).jelly as Declaration & { signIns: SignIn[] }
 
 describe("the jelly declaration", () => {
-  test("gives each tool the effect the plugin's own default rules give it", () => {
-    expect(jelly.tools.length).toBeGreaterThan(0)
-    for (const tool of jelly.tools) expect(effectOf(tool.permission), tool.permission).toBe(tool.effect)
+  test("follows the plugin authors' standard, with the effects the plugin's own default rules give", () => {
+    expect(declarationProblems(ROOT, { effectOf: effectFromRules(defaultRules()) })).toEqual([])
   })
 
-  test("names each tool once, as the engine names its permission (namespace.tool for namespace_tool)", () => {
-    const names = jelly.tools.map((tool) => tool.name)
-    expect(new Set(names).size).toBe(names.length)
-    for (const tool of jelly.tools) expect(tool.name.replaceAll(".", "_"), tool.name).toBe(tool.permission)
-  })
-
-  test("docs/jelly.md states the declared tool counts", () => {
-    const doc = readFileSync(new URL("../../docs/jelly.md", import.meta.url), "utf8")
-    const readOnly = jelly.tools.filter((tool) => tool.readOnly).length
-    expect(doc).toContain(`${jelly.tools.length} tools are declared (${readOnly} read-only)`)
-  })
-
-  test("names every skill the package ships", () => {
-    expect([...jelly.skills].sort()).toEqual(readdirSync(new URL("../../skills", import.meta.url)).sort())
-  })
-
-  // Jelly keeps an icon only if its cleaner passes it (hey-jelly's plugin-icon.ts); this checks the same vocabulary
-  // without importing Jelly. The cleaner refuses <title> (hey-jelly issue #33).
-  describe("summary and icon", () => {
-    const ELEMENTS = ["svg", "g", "path", "circle", "ellipse", "rect", "line", "polyline", "polygon", "defs", "linearGradient", "radialGradient", "stop", "clipPath", "mask"]
-
-    test("the summary is one line of 1 to 120 characters", () => {
-      expect(jelly.summary).toBe(jelly.summary.trim())
-      expect(jelly.summary.length).toBeGreaterThan(0)
-      expect(jelly.summary.length).toBeLessThanOrEqual(120)
-      expect(jelly.summary).not.toContain("\n")
-    })
-
-    test("the icon is a small SVG the package ships, drawn only with elements Jelly's cleaner keeps, and no title", () => {
-      expect(jelly.icon).toBe("assets/icon.svg")
-      expect(manifest.files).toContain(jelly.icon)
-      const svg = readFileSync(new URL(`../../${jelly.icon}`, import.meta.url), "utf8")
-      expect(svg.length).toBeLessThan(2048)
-      expect(svg.trim()).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 48 48"[ >]/)
-      expect(svg).not.toMatch(/<title|<\?xml|<!|&|<script|<style|href=/i)
-      const names = [...svg.matchAll(/<\/?([A-Za-z][A-Za-z0-9]*)/g)].map((match) => match[1])
-      expect(names.filter((name) => !ELEMENTS.includes(name!))).toEqual([])
-    })
+  test("docs/jelly.md follows the plugin authors' standard", () => {
+    expect(docProblems(ROOT)).toEqual([])
   })
 
   describe("sign-ins", () => {

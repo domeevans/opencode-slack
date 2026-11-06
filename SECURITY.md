@@ -15,13 +15,13 @@ Report vulnerabilities privately through GitHub: on this repository, open **Secu
 The plugin is configuration and status code. It makes no network requests, defines no tools and never reads your Slack tokens. When OpenCode loads it, it:
 
 - adds Slack's hosted MCP server, `https://mcp.slack.com/mcp`, to OpenCode with your Slack app's OAuth client;
-- without `oauth.client_id` in its options, adds **Slack app** to `/connect` and reads that entry (the client ID and an optional client secret) from OpenCode's credential store;
+- without `oauth.client_id` in its options, adds **Slack app client ID** to `/connect` and reads that entry (the client ID and an optional client secret) from OpenCode's credential store;
 - adds the default rules to each agent: Slack tools ask, and the known reads are allowed;
 - registers `/slack-status`, the status RPC, the tools RPC for scripts, the TUI `/slack` dialog and the `slack-search` skill.
 
 OpenCode does everything else. It connects to Slack over HTTPS, runs the OAuth sign-in (PKCE for public apps), stores the credential outside your project config, refreshes it, and asks before tool calls according to your permission rules. `opencode mcp logout slack` deletes the Slack sign-in, and `opencode auth logout slack-app` deletes the saved client.
 
-The client ID is public. A client secret is needed only for apps without PKCE. Give it in the `/connect` **Slack app** entry, where OpenCode stores it in its credential store (the field is not masked while you type), or through `{env:NAME}` in the options; never as text in a config file. Status reports only that a secret is set, never its value.
+The client ID is public. A client secret is needed only for apps without PKCE. Give it in the `/connect` **Slack app client ID** entry, where OpenCode stores it in its credential store (the field is not masked while you type), or through `{env:NAME}` in the options; never as text in a config file. Status reports only that a secret is set, never its value.
 
 ### Data flow
 

@@ -28,7 +28,7 @@ Every option is optional. Pass options in the object form of a `plugins` entry:
 
 | Option | Default | Rule |
 | --- | --- | --- |
-| `oauth.client_id` | Not set: the client ID saved in the `/connect` Slack app entry is used | A non-empty string without spaces. The client ID is public. Find it under **Basic Information → App Credentials** in your Slack app. When set, it wins over `/connect`, and `/connect` shows no Slack app entry. |
+| `oauth.client_id` | Not set: the client ID saved in the `/connect` Slack app client ID entry is used | A non-empty string without spaces. The client ID is public. Find it under **Basic Information → App Credentials** in your Slack app. When set, it wins over `/connect`, and `/connect` shows no Slack app entry. |
 | `oauth.redirect_uri` | `http://localhost:8765/callback` | Either a loopback `http:` URL on host `localhost` or `127.0.0.1` with an explicit port, or an `https:` URL on any host. Both need a path, and neither may have a user name, password, query or fragment. It must exactly match a redirect URL registered in the Slack app. See [The callback: loopback or hosted](#the-callback-loopback-or-hosted). |
 | `oauth.callback_port` | Not set | A whole number from 1 to 65535: the port of OpenCode's local callback listener on `127.0.0.1`. Required with an `https:` `oauth.redirect_uri`, and refused with a loopback one, whose own port is the listener's. |
 | `oauth.scopes` | `["channels:history", "channels:read", "search:read.public", "users:read"]` | A non-empty list of unique Slack user scopes, each without spaces. Your list replaces the default list. See [Scopes](#scopes). |
@@ -65,9 +65,9 @@ Whichever you use, add it to the Slack app's redirect URLs: see [Create the Slac
 Slack has no dynamic client registration, so OpenCode signs in with one fixed Slack app. No client ID ships with the plugin. It takes the client ID from the first of:
 
 1. `oauth.client_id` in the plugin options, for example from an organisation's [managed config](../README.md#organisation-rollout);
-2. the **Slack app** entry in `/connect` (`opencode auth login slack-app` in a terminal). It is a key method: the key is the client ID, and an optional form field holds the client secret for an app without PKCE. OpenCode keeps both in its credential store. Saving, switching or removing the entry takes effect without a restart. An entry that is empty or has spaces is reported as `CLIENT_ID_INVALID`, and `/connect` marks it as needing sign-in.
+2. the **Slack app client ID** entry in `/connect` (`opencode auth login slack-app` in a terminal). It is a key method: the key is the client ID, and an optional form field holds the client secret for an app without PKCE. OpenCode keeps both in its credential store. Saving, switching or removing the entry takes effect without a restart. An entry that is empty or has spaces is reported as `CLIENT_ID_INVALID`, and `/connect` marks it as needing sign-in.
 
-Without a client ID, the plugin adds no Slack server, and status shows `not configured` with the code `CLIENT_ID_MISSING` and the next step `Run /connect and choose Slack app, then paste your Slack app's client ID.`
+Without a client ID, the plugin adds no Slack server, and status shows `not configured` with the code `CLIENT_ID_MISSING` and the next step `Run /connect and choose Slack app client ID, then paste your Slack app's client ID.`
 
 ### Validation errors
 
@@ -96,7 +96,7 @@ The checks run in this order, and status reports only the first problem:
 
 Slack apps with PKCE turned on are public clients and need no secret. That is the recommended setup, and [the app manifest](slack-app-manifest.json) turns PKCE on. If your organisation's app does not use PKCE, give OpenCode its client secret in one of two ways:
 
-- in the `/connect` **Slack app** entry, in the **Client secret** field. OpenCode stores it in its credential store, but shows the field unmasked while you type;
+- in the `/connect` **Slack app client ID** entry, in the **Client secret** field. OpenCode stores it in its credential store, but shows the field unmasked while you type;
 - in the options, through an environment variable:
 
   ```jsonc
@@ -161,7 +161,7 @@ With a client secret, it also passes `client_secret`. With an `https:` `oauth.re
 
 The plugin always sends `redirect_uri`. Without it, OpenCode would use `http://127.0.0.1:<port>/callback`, which does not match a Slack app registered with `http://localhost:8765/callback`.
 
-**In `/connect`:** OpenCode lists the server's own sign-in, which the plugin names **Slack**. Without `oauth.client_id` in the options, the plugin also adds **Slack app** (ID `slack-app`) for the client ID. With it, there is no **Slack app** entry, and no status line or next step mentions one: nobody is asked to paste a client ID.
+**In `/connect`:** OpenCode lists the server's own sign-in, which the plugin names **Slack**. Without `oauth.client_id` in the options, the plugin also adds **Slack app client ID** (ID `slack-app`) for the client ID. With it, there is no **Slack app client ID** entry, and no status line or next step mentions one: nobody is asked to paste a client ID.
 
 **Name collision.** If your config already defines an MCP server with the same name, for example `mcp.servers.slack`, the plugin leaves it alone. Status then shows the state `conflict` with the code `SERVER_NAME_IN_USE`. Remove your entry: Slack's tools then come from the plugin's server.
 
@@ -344,8 +344,8 @@ Every error the plugin raises reads `CODE: What happened. Next step: What to do.
 
 | Code | Connection | Next step |
 | --- | --- | --- |
-| `CLIENT_ID_MISSING` | not configured | Run /connect and choose Slack app, then paste your Slack app's client ID. |
-| `CLIENT_ID_INVALID` | not configured | Run /connect and choose Slack app, then paste your Slack app's client ID. |
+| `CLIENT_ID_MISSING` | not configured | Run /connect and choose Slack app client ID, then paste your Slack app's client ID. |
+| `CLIENT_ID_INVALID` | not configured | Run /connect and choose Slack app client ID, then paste your Slack app's client ID. |
 | `AUTH_REQUIRED` | sign-in required | Run /connect and choose Slack, then press o or Enter to open the sign-in page (in a terminal, opencode mcp auth slack opens the browser automatically). |
 | `CONNECTION_FAILED` | failed | Fix the error shown, then reconnect slack in /mcps. |
 | none: connecting | connecting | Wait a few seconds, then run /slack-status again (or press r in /slack). |

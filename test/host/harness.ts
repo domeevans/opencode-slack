@@ -119,7 +119,7 @@ function projectConfig(project: Project, plugin: string, callLog: string): objec
     case "invalid":
       return { ...LOCAL_PROVIDERS_OFF, plugins: [slack(plugin, { oauth: { client_id: CLIENT_ID, bogus: 1 } }), probe({})] }
     case "connect":
-      // No client ID in the options: it comes from the /connect Slack app entry.
+      // No client ID in the options: it comes from the /connect Slack app client ID entry.
       return { ...LOCAL_PROVIDERS_OFF, plugins: [slack(plugin, {}), probe({})] }
     case "shadowed":
       // The project's own skill under the bundled skill's id, which OpenCode loads instead.

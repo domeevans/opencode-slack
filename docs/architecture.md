@@ -18,7 +18,7 @@ The plugin is configuration and status code around Slack's hosted MCP server. Op
 ## Modules
 
 - `options.ts`: validates the plugin options. Errors name the field and never echo its value.
-- `connect.ts`: the **Slack app** `/connect` entry (a key method whose key is the client ID), client resolution (options, then `/connect`; no client ships), and the **Slack** display name of the server's own integration.
+- `connect.ts`: the **Slack app client ID** `/connect` entry (a key method whose key is the client ID), client resolution (options, then `/connect`; no client ships), and the **Slack** display name of the server's own integration.
 - `server.ts`: the MCP server config, registered only when there is a client and the name is free.
 - `permissions.ts` and `tools.ts`: the tool classes, the default rule block inserted after each agent's base allow, and the reads a script may call.
 - `host/tools-rpc.ts`: the tools RPC. See [Tools RPC](#tools-rpc).
@@ -29,7 +29,7 @@ The plugin is configuration and status code around Slack's hosted MCP server. Op
 ## Runtime flow
 
 1. Setup parses the options and checks the host version. On invalid options, or a host outside the supported range, it registers only the status surfaces.
-2. Without `oauth.client_id`, it adds **Slack app** to `/connect` and reads the stored client from OpenCode's credential store.
+2. Without `oauth.client_id`, it adds **Slack app client ID** to `/connect` and reads the stored client from OpenCode's credential store.
 3. The MCP transform registers `https://mcp.slack.com/mcp` with that client, or nothing when there is none. A tool transform gives the server's Code Mode namespace its description (`NAMESPACE_DESCRIPTION` in `tools.ts`).
 4. When the plugin is set up, the tools RPC registers after the status RPC, for the server `slack`. It is a conflict while `nameInUse` is set.
 5. A background listener handles `credential.updated` and `credential.switched` (the client changed: `ctx.mcp.reload()`) and `integration.updated` (OpenCode re-registered the server's integration: rename it **Slack** again). Setup's cleanup stops it.

@@ -35,7 +35,7 @@ function input(overrides: Partial<StatusInput> = {}): StatusInput {
 }
 
 const SIGN_IN = "Run /connect and choose Slack, then press o or Enter to open the sign-in page (in a terminal, opencode mcp auth slack opens the browser automatically)."
-const NO_CLIENT_NEXT = "Run /connect and choose Slack app, then paste your Slack app's client ID."
+const NO_CLIENT_NEXT = "Run /connect and choose Slack app client ID, then paste your Slack app's client ID."
 const AGENT_FIX = "Put the default rules shown by /slack-status first in each listed agent's own permissions, in opencode.json or the agent's Markdown file, followed by your top-level rules for Slack tools."
 
 // Every state and error code, with the exact message and next step each surface shows.
@@ -67,7 +67,7 @@ const STATES: readonly (readonly [string, StatusInput, Pick<Status, "state" | "c
   ["an unusable saved client ID", input({ client: { invalid: true } }), {
     state: "not_configured",
     code: "CLIENT_ID_INVALID",
-    message: "The client ID saved in the /connect Slack app entry is empty or has spaces, so Slack is not added.",
+    message: "The client ID saved in the /connect Slack app client ID entry is empty or has spaces, so Slack is not added.",
     nextStep: NO_CLIENT_NEXT,
   }],
   ["a server name in use", input({ nameInUse: true }), {
@@ -214,7 +214,7 @@ describe("buildStatus details", () => {
     expect(sameClient.length).toBeGreaterThan(5)
     for (const [label, given] of sameClient) {
       const status = buildStatus({ ...given, client: C1 })
-      expect({ label, text: formatStatus(status).includes("Slack app") }).toEqual({ label, text: false })
+      expect({ label, text: formatStatus(status).includes("Slack app client ID") }).toEqual({ label, text: false })
       expect({ label, next: status.nextStep.includes("paste") }).toEqual({ label, next: false })
     }
   })
