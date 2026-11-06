@@ -23,12 +23,12 @@ const NO_SPACES = /^\S+$/
 /** The `/connect` entry that stores a Slack app's client ID. */
 const APP_INTEGRATION_ID = "slack-app"
 /** The name `/connect` shows for the entry that stores the client ID. */
-export const APP_NAME = "Slack app"
+export const APP_NAME = "Slack app client ID"
 /** The name `/connect` shows for the Slack MCP server's own integration. */
 export const SERVER_DISPLAY_NAME = "Slack"
 
 /**
- * Adds "Slack app" to `/connect`: a key method whose key is the client ID, because OpenCode asks for a non-empty
+ * Adds "Slack app client ID" to `/connect`: a key method whose key is the client ID, because OpenCode asks for a non-empty
  * key. The optional secret is a form field, for apps without PKCE. Both are kept in OpenCode's credential store.
  */
 export function registerAppIntegration(integration: Pick<Context["integration"], "transform">) {

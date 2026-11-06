@@ -123,15 +123,15 @@ describe("what asks first", () => {
   // Every class that asks by default, and how each text that lists them names it.
   const NAMES: Record<string, RegExp> = { private: /private (search|channels)/i, file: /(file reads|reading files)/i, write: /writes/i }
 
-  test("status, the Code Mode namespace and the Jelly summary each name every class that asks", () => {
+  // The Jelly summary says what the plugin reaches, not what asks: Jelly's card shows each tool's effect.
+  test("status and the Code Mode namespace each name every class that asks", () => {
     const asking: string[] = [...new Set(Object.keys(SLACK_SCHEMAS).map(classify))].filter((toolClass) => toolClass !== "read").sort()
     const { asksBefore } = buildStatus({
       version: "9.9.9", hostVersion: "2.2.3", hostSupported: true, hostTested: true, parsed: parseOptions({}), active: true, nameInUse: false,
       client: { invalid: false }, servers: [], tools: [], agents: [], shadowedSkills: [],
     })
     expect(asking).toEqual(Object.keys(NAMES).sort())
-    const summary = (JSON.parse(read("package.json")) as { jelly: { summary: string } }).jelly.summary
-    for (const [where, text] of [["status", asksBefore.join("; ")], ["namespace", NAMESPACE_DESCRIPTION], ["jelly.summary", summary]] as const)
+    for (const [where, text] of [["status", asksBefore.join("; ")], ["namespace", NAMESPACE_DESCRIPTION]] as const)
       for (const toolClass of asking) expect({ where, toolClass, named: NAMES[toolClass]!.test(text) }).toEqual({ where, toolClass, named: true })
   })
 })

@@ -99,7 +99,7 @@ describe("setup with a client ID in the options", () => {
     expect(await host.status()).toMatchObject({ client: { id: "C1", mode: "public_pkce", source: "options" } })
   })
 
-  test("adds no Slack app entry to /connect and ignores a stored client", async () => {
+  test("adds no Slack app client ID entry to /connect and ignores a stored client", async () => {
     const host = await setUp({ options: { oauth: { client_id: "C1" } }, credentials: { "slack-app": stored("C2") } })
     expect(host.integrations.has("slack-app")).toBe(false)
     host.store("slack-app", stored("C3"))
@@ -113,7 +113,7 @@ describe("setup with a client ID in the options", () => {
       const host = await setUp({ options: { oauth: { client_id: "C1" } }, status: { slack: status } })
       expect([...host.integrations.keys()].filter((id) => id.endsWith("-app"))).toEqual([])
       const text = (await host.slashStatus()).text
-      expect({ status: status.status, mentions: text.includes("Slack app") }).toEqual({ status: status.status, mentions: false })
+      expect({ status: status.status, mentions: text.includes("Slack app client ID") }).toEqual({ status: status.status, mentions: false })
       expect(await host.status()).toMatchObject({ client: { source: "options" } })
       await host.dispose()
     }
@@ -227,7 +227,7 @@ describe("setup without a client ID in the options", () => {
     const host = await setUp({ options: CONNECT })
     expect(host.calls[0]).toBe("integration.transform")
     expect(host.integrations.get("slack-app")).toEqual({
-      name: "Slack app",
+      name: "Slack app client ID",
       methods: [{
         type: "key",
         label: "Slack app client ID",
@@ -252,10 +252,10 @@ describe("setup without a client ID in the options", () => {
       state: "not_configured",
       code: "CLIENT_ID_MISSING",
       message: "No Slack app client ID is set, so Slack is not added. To create the app, use the manifest at https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/slack-app-manifest.json.",
-      nextStep: "Run /connect and choose Slack app, then paste your Slack app's client ID.",
+      nextStep: "Run /connect and choose Slack app client ID, then paste your Slack app's client ID.",
     })
     expect(Object.keys(status as object)).not.toContain("client")
-    expect((await host.slashStatus()).text).toEndWith("\nNext step: Run /connect and choose Slack app, then paste your Slack app's client ID.")
+    expect((await host.slashStatus()).text).toEndWith("\nNext step: Run /connect and choose Slack app client ID, then paste your Slack app's client ID.")
   })
 
   test("uses the client saved in /connect, with its optional secret", async () => {
@@ -276,8 +276,8 @@ describe("setup without a client ID in the options", () => {
     expect(await host.status()).toMatchObject({
       state: "not_configured",
       code: "CLIENT_ID_INVALID",
-      message: "The client ID saved in the /connect Slack app entry is empty or has spaces, so Slack is not added.",
-      nextStep: "Run /connect and choose Slack app, then paste your Slack app's client ID.",
+      message: "The client ID saved in the /connect Slack app client ID entry is empty or has spaces, so Slack is not added.",
+      nextStep: "Run /connect and choose Slack app client ID, then paste your Slack app's client ID.",
     })
     expect(host.connectionStatus.get("slack-app")).toEqual({ status: "needs_auth", message: "This is not a Slack client ID: it is empty or has spaces." })
     await until(() => host.subscribers() === 1)

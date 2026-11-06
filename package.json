@@ -1,6 +1,6 @@
 {
   "name": "@joe-broadhead/opencode-slack",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Unofficial OpenCode plugin for Slack",
   "keywords": [
     "opencode",
@@ -40,7 +40,7 @@
     "test:host": "bun test test/host",
     "test:pack": "bun test test/pack",
     "drift": "bun scripts/drift.ts",
-    "check": "npm run typecheck && npm run build && npm test && npm run test:tui && npm run test:host && npm run test:pack"
+    "check": "npm run typecheck && node scripts/check-copies.mjs && npm run build && npm test && npm run test:tui && npm run test:host && npm run test:pack"
   },
   "devDependencies": {
     "@babel/core": "7.29.7",
@@ -60,7 +60,7 @@
   },
   "jelly": {
     "title": "Slack",
-    "summary": "Search and read Slack; writes, private search and file reads ask first.",
+    "summary": "Your Slack messages, channels, canvases and files.",
     "icon": "assets/icon.svg",
     "tools": [
       {
@@ -234,9 +234,13 @@
     "signIns": [
       {
         "id": "app",
-        "label": "Slack app",
+        "label": "Slack app client ID",
         "integration": "slack-app",
         "presetBy": "oauth.client_id",
+        "hostClient": {
+          "id": "slack",
+          "option": "oauth.client_id"
+        },
         "help": {
           "url": "https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/slack-app-manifest.json",
           "label": "Create the Slack app from its manifest, then paste its client ID"

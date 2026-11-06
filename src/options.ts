@@ -1,7 +1,7 @@
 import { CALLBACK_PORT_EXAMPLE, DEFAULT_REDIRECT_URI, DEFAULT_SCOPES, HOSTED_REDIRECT_EXAMPLE } from "./defaults.js"
 
 export interface Options {
-  /** Pins the Slack app, for example in an organisation's managed config. Otherwise the /connect Slack app entry sets it. */
+  /** Pins the Slack app, for example in an organisation's managed config. Otherwise the /connect Slack app client ID entry sets it. */
   readonly clientId?: string
   readonly redirectUri: string
   /** The local port OpenCode's callback listener uses. Set only, and always, with an `https:` redirect. */
