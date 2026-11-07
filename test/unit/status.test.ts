@@ -148,13 +148,13 @@ describe("buildStatus states", () => {
   })
 
   test("a release inside the supported range that the checks do not run on proceeds, and says it is untested", () => {
-    const status = buildStatus(input({ hostVersion: "2.2.6", hostSupported: true, hostTested: false }))
-    expect(status).toMatchObject({ state: "connected", nextStep: "Nothing to do.", host: { version: "2.2.6", range: ">=2.2.3 <2.3.0", tested: false } })
-    expect(formatStatus(status)).toContain("OpenCode: 2.2.6 (untested; supported range >=2.2.3 <2.3.0)")
+    const status = buildStatus(input({ hostVersion: "2.2.99", hostSupported: true, hostTested: false }))
+    expect(status).toMatchObject({ state: "connected", nextStep: "Nothing to do.", host: { version: "2.2.99", range: ">=2.2.3 <2.3.0", tested: false } })
+    expect(formatStatus(status)).toContain("OpenCode: 2.2.99 (untested; supported range >=2.2.3 <2.3.0)")
   })
 
   test("each tested release reads tested, with the supported range", () => {
-    for (const version of ["2.2.3", "2.2.4", "2.2.5"])
+    for (const version of ["2.2.3", "2.2.4", "2.2.5", "2.2.6"])
       expect(formatStatus(buildStatus(input({ hostVersion: version })))).toContain(`OpenCode: ${version} (tested; supported range >=2.2.3 <2.3.0)`)
   })
 

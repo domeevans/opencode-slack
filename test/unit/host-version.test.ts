@@ -10,8 +10,8 @@ test("the supported range is the 2.2 line from 2.2.3, as package.json states", (
   expect(manifest.opencode.host).toBe(SUPPORTED_HOST_RANGE)
 })
 
-test("the tested releases are 2.2.3, 2.2.4 and 2.2.5, each inside the supported range", () => {
-  expect([...TESTED_HOSTS]).toEqual(["2.2.3", "2.2.4", "2.2.5"])
+test("the tested releases are 2.2.3, 2.2.4, 2.2.5 and 2.2.6, each inside the supported range", () => {
+  expect([...TESTED_HOSTS]).toEqual(["2.2.3", "2.2.4", "2.2.5", "2.2.6"])
   for (const version of TESTED_HOSTS) expect({ version, supported: isSupportedHost(version) }).toEqual({ version, supported: true })
 })
 
@@ -19,9 +19,8 @@ test.each([
   ["2.2.3", true, true],
   ["2.2.4", true, true],
   ["2.2.5", true, true],
-  ["2.2.6", true, false],
-  ["2.2.10", true, false],
   ["2.2.99", true, false],
+  ["2.2.10", true, false],
   ["2.3.0", false, false],
   ["2.10.0", false, false],
   ["2.2.2", false, false],

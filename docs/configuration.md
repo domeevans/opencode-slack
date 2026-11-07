@@ -112,10 +112,10 @@ Status shows the client mode as `confidential, secret set` and never shows the v
 
 ### Host check
 
-When it loads, the plugin compares the OpenCode version with its supported range, `>=2.2.3 <2.3.0`, which `package.json` declares as `opencode.host`. Every check runs on OpenCode 2.2.3, 2.2.4 and 2.2.5, the tested releases. Status shows the version, whether it is tested and the supported range in its `OpenCode` row, for example `2.2.5 (tested; supported range >=2.2.3 <2.3.0)`.
+When it loads, the plugin compares the OpenCode version with its supported range, `>=2.2.3 <2.3.0`, which `package.json` declares as `opencode.host`. Every check runs on OpenCode 2.2.3, 2.2.4, 2.2.5 and 2.2.6, the tested releases. Status shows the version, whether it is tested and the supported range in its `OpenCode` row, for example `2.2.5 (tested; supported range >=2.2.3 <2.3.0)`.
 
 - **A tested release:** the plugin sets everything up.
-- **Another release inside the range, such as 2.2.6:** the plugin sets everything up too. Status marks the version `untested` (the RPC's `host.tested` is `false`), and its state is the connection's.
+- **Another release inside the range, such as 2.2.99:** the plugin sets everything up too. Status marks the version `untested` (the RPC's `host.tested` is `false`), and its state is the connection's.
 - **Outside the range, including prereleases and development builds:** the plugin registers only `/slack-status`, the TUI view and the status RPC. They show the connection `host untested` and the code `HOST_UNTESTED`, with the next step `Use OpenCode >=2.2.3 <2.3.0, or set "allowUntestedHost": true in this plugin's options to run anyway.` If an option is also invalid, they show `OPTIONS_INVALID` first.
 - **Outside the range with `"allowUntestedHost": true`:** the plugin sets everything up, and status marks the version as untested.
 
@@ -330,7 +330,7 @@ Approving a write tool in OpenCode does not grant its Slack scope. Without the s
 | `asksBefore` | What asks by default |
 | `tools` | Counts of `read`, `private`, `file`, `write` and `unknown` tools on the server, and `unknownNames`: at most 20 of the unknown tools' names, only those made of lowercase letters, digits and `_` |
 | `unguardedAgents` | Agents that would run an unknown Slack tool without asking; empty when there are none. An agent whose own rules already ask or deny for every Slack tool is not listed. |
-| `host` | `version` (`null` if OpenCode reports none), `range` (the supported range) and `tested` (true only for 2.2.3, 2.2.4 and 2.2.5) |
+| `host` | `version` (`null` if OpenCode reports none), `range` (the supported range) and `tested` (true only for 2.2.3, 2.2.4, 2.2.5 and 2.2.6) |
 | `shadowedSkills` | Skills with a bundled skill's id, `slack-search`, that OpenCode loads instead of the bundled one, each as `id` and `path`: for example a skill in your own or the project's skill folders. Empty when there are none. |
 
 Scripts have a second RPC, `slack.workspace.tools`, which calls Slack's read tools with no model. It has its own error codes; see [Scripting](scripting.md).

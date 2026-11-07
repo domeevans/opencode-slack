@@ -78,15 +78,15 @@ describe("setup with a client ID in the options", () => {
 
   test("the status RPC carries the plugin's version from package.json and the tested host", async () => {
     const { version } = JSON.parse(await Bun.file(new URL("../../package.json", import.meta.url)).text()) as { version: string }
-    for (const host of ["2.2.3", "2.2.4", "2.2.5"])
+    for (const host of ["2.2.3", "2.2.4", "2.2.5", "2.2.6"])
       expect(await (await setUp({ version: host })).status()).toMatchObject({ version, host: { version: host, range: ">=2.2.3 <2.3.0", tested: true } })
   })
 
   test("a release inside the supported range that the checks do not run on sets everything up, and status calls it untested", async () => {
-    const host = await setUp({ version: "2.2.6", status: { slack: { status: "connected" } } })
+    const host = await setUp({ version: "2.2.99", status: { slack: { status: "connected" } } })
     expect(registrations(host.calls)).toEqual(FULL)
-    expect(await host.status()).toMatchObject({ state: "connected", host: { version: "2.2.6", tested: false } })
-    expect((await host.slashStatus()).text).toContain("OpenCode: 2.2.6 (untested; supported range >=2.2.3 <2.3.0)")
+    expect(await host.status()).toMatchObject({ state: "connected", host: { version: "2.2.99", tested: false } })
+    expect((await host.slashStatus()).text).toContain("OpenCode: 2.2.99 (untested; supported range >=2.2.3 <2.3.0)")
   })
 
   test("registers Slack's MCP server with the configured OAuth app", async () => {
