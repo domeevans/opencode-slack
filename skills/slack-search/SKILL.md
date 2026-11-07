@@ -91,7 +91,7 @@ opencode api post /api/rpc/slack.workspace.tools/slack_search_public \
 - **The result** is `{"output":{"output":…,"text":…}}`, with the same Markdown text as above.
 - **`describe`** (`-d '{"input":{}}'`) lists the methods.
 - **Errors:** `opencode api` exits with status 1 on an RPC error, after it prints the error JSON. Check the status before you use the output.
-- **Permissions:** the script runs under the session agent's rules, and an ask is refused. So `slack_search_public_and_private` and `slack_read_file` need an allow rule. Writes are never methods.
+- **Permissions:** the script runs under the session agent's rules, resolved before the tool runs: only an allow runs, and an ask is refused. So `slack_search_public_and_private`, `slack_read_file` and every write and send need an allow rule. A saved "Always allow" does not authorize a script.
 - **Its own session, also for a test:** your chat session names no agent, so the RPC refuses it. Create a session for the script as above, and tell the user. Never borrow a session found in history or a session list: the script would run as that session's agent, under its rules.
 - **Details:** https://raw.githubusercontent.com/joe-broadhead/opencode-slack/HEAD/docs/scripting.md
 

@@ -312,7 +312,9 @@ export function fakeHost(input: FakeHostInput = {}) {
   const script = (method: string, sessionID: string, toolInput: unknown = {}, signal = new AbortController().signal) => {
     const handler = rpcs.get("slack.workspace.tools")?.[method]
     if (handler === undefined) throw new Error(`the tools RPC has no method ${method}`)
-    return handler(method === "describe" ? {} : { sessionID, input: toolInput }, { signal, error: (type, message, data) => ({ error: type, message, data }) })
+    // describe takes nothing, or a session to resolve each method's permission for.
+    const input = method === "describe" ? (sessionID === "" ? {} : { sessionID }) : { sessionID, input: toolInput }
+    return handler(input, { signal, error: (type, message, data) => ({ error: type, message, data }) })
   }
 
   /** Runs `/slack-status` and returns the synthetic message it posted. */

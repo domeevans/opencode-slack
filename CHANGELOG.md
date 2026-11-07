@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- tools RPC v2: every known tool is scriptable under a prior explicit allow. `slack.workspace.tools` now has one method per known tool, by exact name and with a class (read, send or write), not only the fourteen reads. The rule for each call is resolved before the tool runs, in OpenCode's own order; only an `allow` runs, and an `ask` is refused with no prompt and no tool call. `describe` reports each method's class, and — given a session — that session's permission, plus any live tool this plugin does not classify. A saved "Always allow" approval no longer authorizes an ad-hoc script: a script's grant is a rule in the agent's or the session's config, or a Jobs `jobs_run_script` run session. `opencode api` callers must send `-H "x-opencode-directory:$PWD"`, or the call reaches the service's default location and fails `rpc.unavailable`.
+
 ## [0.0.7] - 2026-11-06
 
 ### Added

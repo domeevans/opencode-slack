@@ -56,6 +56,10 @@ export interface Host {
   location(project: Project): { readonly directory: string }
   /** The tools OpenCode called on the fake Slack server, in order. */
   toolCalls(): string[]
+  /** Raw HTTP to a stock `opencode serve`, for the location cases; the embedded host has none. */
+  api?(method: string, path: string, body?: unknown, location?: string, headers?: Record<string, string>): Promise<{ status: number; data: unknown }>
+  /** `opencode api` against a stock host, in its isolated environment; the embedded host has none. */
+  cli?(args: string[], cwd?: string): { status: number; out: string }
   close(): Promise<void>
 }
 
@@ -347,6 +351,25 @@ export async function startBinary(version: string, plugin = REPO): Promise<Host>
     state: join("home", ".local", "share", "opencode"),
     location: (project) => ({ directory: root.directory(project) }),
     toolCalls: toolCalls(root),
+    async api(method, path, body, location, headers = {}) {
+      const url = new URL(path, `http://127.0.0.1:${port}`)
+      if (location) url.searchParams.set("location[directory]", location)
+      const response = await fetch(url, {
+        method,
+        headers: { authorization: `Basic ${btoa(`opencode:${password}`)}`, "content-type": "application/json", ...headers },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      })
+      const text = await response.text()
+      let data: unknown = text
+      try {
+        data = JSON.parse(text)
+      } catch {}
+      return { status: response.status, data }
+    },
+    cli(args, cwd) {
+      const result = spawnSync(binary, ["api", "--server", `http://127.0.0.1:${port}`, ...args], { env, cwd: cwd ?? root.path, encoding: "utf8", timeout: 30_000 })
+      return { status: result.status ?? 1, out: `${result.stdout ?? ""}${result.stderr ?? ""}` }
+    },
     close,
   }
 }

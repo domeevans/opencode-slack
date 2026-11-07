@@ -38,7 +38,7 @@ The plugin defines no tools, makes no network requests and never reads Slack tok
 
 ## Tools RPC
 
-`slack.workspace.tools` lets a script call the known reads with no model; [Scripting](scripting.md) is the user's view. Its methods are `describe` and one per tool in `SCRIPTABLE_TOOLS` (`src/tools.ts`): the classes `read`, `private` and `file`, named after the upstream tool. It is an allowlist: a write or a tool that Slack adds later is never a method.
+`slack.workspace.tools` lets a script call every known Slack tool with no model; [Scripting](scripting.md) is the user's view. Its methods are `describe` and one per tool in `KNOWN_TOOLS` (`src/tools.ts`), by exact upstream name and with a tools RPC class: a `read`, `private` or `file` tool is `read`; a write is `send` when it reaches people (`SEND_TOOLS`) and `write` otherwise. It is an allowlist: a tool that Slack adds later is not a method until it is classified, and `describe` lists it as unclassified.
 
 A call is `{ sessionID, input }`. The module:
 

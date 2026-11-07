@@ -6,8 +6,8 @@ import { homedir } from "node:os"
 import { join, sep } from "node:path"
 import { defaultRules, type Rule } from "../../src/permissions.js"
 import type { Status } from "../../src/status.js"
-import { KNOWN_READS, TOOLS_RPC_ID } from "../../src/host/tools-rpc.js"
-import { classify } from "../../src/tools.js"
+import { METHODS, TOOLS_RPC_ID } from "../../src/host/tools-rpc.js"
+import { classify, READ_TOOLS } from "../../src/tools.js"
 import { fakeInput, FAKE_TOOLS, UPSTREAM_FAILURE } from "./fake-slack-mcp.js"
 import { CLIENT_ID, HOSTED_OAUTH, REPO, repositoryChanges, SHADOWING_SKILL, TEMP, USER_SERVER, type Host, type Project } from "./harness.js"
 import type { Outcome } from "./probe/index.js"
@@ -171,6 +171,7 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
       const CHANNEL = { channel_id: "C0TEST" }
       const THREAD = { channel_id: "C0TEST", message_ts: "1730000000.000100" }
       const FILE = { file_id: "F0TEST" }
+      const MESSAGE = { channel_id: "C0TEST", text: "hello" }
 
       beforeAll(async () => {
         expect((await discovered("defaults")).state).toBe("connected")
@@ -179,30 +180,31 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         sessions.build = await create({ agent: "build" })
         sessions.locked = await create({ agent: "locked" })
         sessions.agentless = await create({})
-        // Session rules come after the agent's: one narrows build, one allows build the reads that ask, one reopens a
+        // Session rules come after the agent's: one narrows build, one allows build the tools that ask, one reopens a
         // read for locked.
         sessions.narrow = await create({ agent: "build", permissions: [permission("slack_slack_search_public", "deny")] })
         sessions.allowed = await create({
           agent: "build",
           permissions: [permission("slack_slack_search_public_and_private", "allow"), permission("slack_slack_read_file", "allow")],
         })
+        sessions.send = await create({ agent: "build", permissions: [permission("slack_slack_send_message", "allow")] })
         sessions.reopen = await create({ agent: "locked", permissions: [permission("slack_slack_read_thread", "allow")] })
         sessions.collision = await create({ agent: "build" }, "collision")
         sessions.unconfigured = await create({ agent: "build" }, "connect")
       }, 60_000)
 
-      test("describes exactly the known reads, with their live schemas; no write, send or unknown tool is a method", async () => {
+      test("describes every known tool with its class and live schema; no unknown tool is a method", async () => {
         const { value } = await script("describe", {})
         expect(value.id).toBe(TOOLS_RPC_ID)
-        expect(value.methods.map((method: { name: string }) => method.name)).toEqual([...KNOWN_READS])
-        for (const method of value.methods) expect({ ...method, description: undefined, output: undefined }).toEqual({ name: method.name, tool: `slack_${method.name}`, kind: "mcp", action: `slack_${method.name}`, available: true, input: fakeInput(method.name), description: undefined, output: undefined })
-        const from = host.toolCalls().length
-        const excluded = FAKE_TOOLS.filter((tool) => ["write", "unknown"].includes(classify(tool)))
-        expect(excluded.length).toBe(14)
-        for (const tool of excluded) {
-          const refused = await run("build", tool, { query: "q" })
-          expect({ tool, type: refused.type, notFound: /not.?found|unknown/i.test(refused.message) }).toEqual({ tool, type: expect.not.stringMatching(/^failed$/), notFound: true })
+        expect(value.methods.map((method: { name: string }) => method.name)).toEqual(METHODS.map((method) => method.name))
+        for (const method of value.methods) {
+          const expected = METHODS.find((entry) => entry.name === method.name)!
+          expect({ name: method.name, tool: method.tool, kind: method.kind, class: method.class, action: method.action, available: method.available, input: method.input })
+            .toEqual({ name: method.name, tool: `slack_${method.name}`, kind: "mcp", class: expected.class, action: `slack_${method.name}`, available: true, input: fakeInput(method.name) })
         }
+        expect(value.unclassified).toEqual(["slack_brand_new_tool"])
+        const from = host.toolCalls().length
+        expect(await run("build", "slack_brand_new_tool", { query: "q" })).toMatchObject({ type: expect.not.stringMatching(/^failed$/) })
         expect(since(from)).toEqual([])
       })
 
@@ -229,13 +231,29 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         expect(since(from)).toEqual([])
       })
 
+      test("a write is a method: refused before dispatch while it would ask, with no server call", async () => {
+        const from = host.toolCalls().length
+        const refused = await run("build", "slack_send_message", MESSAGE)
+        expect(refused).toMatchObject({ type: "failed", code: "PERMISSION_DENIED" })
+        expect(refused.message).toMatch(/would ask/)
+        expect(since(from)).toEqual([])
+      })
+
+      test("a write a session allows runs, and the fake server receives it", async () => {
+        const from = host.toolCalls().length
+        expect(await run("send", "slack_send_message", MESSAGE)).toEqual({
+          value: { output: { tool: "slack_send_message", arguments: MESSAGE }, text: `slack_send_message: ${JSON.stringify(MESSAGE)}` },
+        })
+        expect(since(from)).toEqual(["slack_send_message"])
+      })
+
       test("refuses the private search and the file read, which ask by default, at once and with no prompt left waiting", async () => {
         const from = host.toolCalls().length
         for (const method of ["slack_search_public_and_private", "slack_read_file"]) {
           const started = Date.now()
           const result = await run("build", method, method === "slack_read_file" ? FILE : { query: "q" })
           expect(result).toMatchObject({ type: "failed", code: "PERMISSION_DENIED" })
-          expect(result.message).toMatch(/cannot answer an approval prompt/)
+          expect(result.message).toMatch(/would ask/)
           expect(Date.now() - started).toBeLessThan(5000)
         }
         const { data: pending } = await host.client.permission.request.list(at("defaults"))
@@ -243,7 +261,7 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         expect(since(from)).toEqual([])
       })
 
-      test("applies the session's rules after the agent's: an allow rule opens the reads that ask", async () => {
+      test("applies the session's rules after the agent's: an allow rule opens the tools that ask", async () => {
         const from = host.toolCalls().length
         expect(await run("narrow", "slack_search_public", { query: "q" })).toMatchObject({ type: "failed", code: "PERMISSION_DENIED" })
         expect((await run("narrow", "slack_read_channel", CHANNEL)).value).toMatchObject({ output: { tool: "slack_read_channel" } })
@@ -254,12 +272,51 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         expect(since(from)).toEqual(["slack_read_channel", "slack_search_public_and_private", "slack_read_file", "slack_read_thread"])
       })
 
+      test("describe with a session reports each method's permission; without one it omits it", async () => {
+        const { value } = await script("describe", { sessionID: sessions.build })
+        const expected = Object.fromEntries(METHODS.map((method) => [method.name, READ_TOOLS.includes(method.name) ? "allow" : "ask"]))
+        expect(Object.fromEntries(value.methods.map((method: { name: string; permission: string }) => [method.name, method.permission]))).toEqual(expected)
+        const plain = (await script("describe", {})).value
+        expect(plain.methods.every((method: object) => !Object.hasOwn(method, "permission"))).toBe(true)
+        expect(plain.location).toBe(host.location("defaults").directory)
+        expect(plain.locationHint).toContain("x-opencode-directory")
+      })
+
       test("gives Slack's own error as UPSTREAM_ERROR: its first line, with the signed URL redacted", async () => {
         const result = await run("build", "slack_search_channels", { query: "fail" })
         expect(result).toMatchObject({ type: "failed", code: "UPSTREAM_ERROR" })
         expect(result.message).toContain("https://files.slack.example/f.pdf?[redacted]")
         for (const hidden of ["fake-signature-123", "second line"]) expect(result.message).not.toContain(hidden)
         expect(UPSTREAM_FAILURE).toContain("fake-signature-123")
+      })
+
+      test("a call with no location fails rpc.unavailable; the location query and the header work", async () => {
+        if (host.api === undefined) {
+          console.log("the embedded host exposes one location API, so the raw location cases run on the stock binaries")
+          return
+        }
+        const path = `/api/rpc/${TOOLS_RPC_ID}/describe`
+        const missing = await host.api("POST", path, { input: {} })
+        expect(missing.status).toBe(400)
+        expect(JSON.stringify(missing.data)).toContain("rpc.unavailable")
+        const query = await host.api("POST", path, { input: {} }, host.location("defaults").directory)
+        expect(query.status).toBe(200)
+        const header = await host.api("POST", path, { input: {} }, undefined, { "x-opencode-directory": host.location("defaults").directory })
+        expect(header.status).toBe(200)
+      })
+
+      test("opencode api needs x-opencode-directory:$PWD: without it rpc.unavailable, with it the call runs", async () => {
+        if (host.cli === undefined) {
+          console.log("the embedded host has no opencode api, so the CLI location case runs on the stock binaries")
+          return
+        }
+        const body = JSON.stringify({ input: {} })
+        const without = host.cli(["post", `/api/rpc/${TOOLS_RPC_ID}/describe`, "-d", body])
+        expect(without.status).not.toBe(0)
+        expect(without.out).toContain("rpc.unavailable")
+        const withHeader = host.cli(["post", `/api/rpc/${TOOLS_RPC_ID}/describe`, "-d", body, "-H", `x-opencode-directory:${host.location("defaults").directory}`])
+        expect(withHeader.status).toBe(0)
+        expect(JSON.parse(withHeader.out)).toMatchObject({ output: { location: host.location("defaults").directory } })
       })
 
       test("refuses with SERVER_CONFLICT while the user's own server holds the name", async () => {
@@ -284,9 +341,9 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         const from = host.toolCalls().length
         for (const envelope of [{ sessionID: sessions.build, input: { query: "q" }, extra: true }, { input: { query: "q" } }, { sessionID: sessions.build, input: "q" }])
           expect(await script("slack_search_public", envelope)).toMatchObject({ type: "rpc.invalid_input" })
-        const describing = await script("describe", { sessionID: sessions.build })
+        const describing = await script("describe", { input: {} })
         expect(describing).toMatchObject({ type: "rpc.invalid_input" })
-        expect(describing.message).toContain("describe takes no input")
+        expect(describing.message).toContain(`"input" is not allowed`)
         expect(since(from)).toEqual([])
       })
 

@@ -1,23 +1,27 @@
 /**
- * The tools RPC: a plugin's known read tools as RPC methods, so a script can call them with no model.
+ * The tools RPC, version 2: every known tool a plugin owns or exposes, as an RPC method, so a script can call it
+ * with no model.
  *
  *   POST /api/rpc/<plugin id>.tools/<method>
  *   { "input": { "sessionID": "<session>", "input": <the tool's input> } }
  *
- * A script runs as a session and the agent it names, with exactly the access that agent's model would have:
- * - a tool the agent's or the session's rules hide from the model (the last rule for the tool on `*` is a deny)
- *   is refused with PERMISSION_DENIED before it runs;
- * - an MCP tool runs through OpenCode's own executor from `ctx.tool.list()`, which checks `<server>_<tool>` against
- *   the agent's rules, the session's rules and saved approvals, and sends OpenCode's own credential;
- * - a plugin-owned tool runs its own spec, with its own `ctx.permission.assert` calls;
- * - an `ask` is refused at once, because no one is there to answer it: an `evaluate` hook turns it into a deny, only
- *   for this RPC's own calls in flight (their source ids), so no other call is touched;
- * - a deny names the refused action, the method's own or an inner one, and says to change the rule: a rule deny never
- *   reaches `evaluate` hooks, so its action comes from OpenCode's own `Permission denied: <action>` text.
- * Only known reads become methods. Writes, sends, unknown tools and local-file exports never do.
+ * A script runs as a session and the agent it names. The rules that decide are the agent's, then the session's, with
+ * the host's own order (the last matching rule wins), which is also the order the model path uses:
+ * - the rule for the method's permission action is resolved BEFORE dispatch; only `allow` runs, so an `ask` is refused
+ *   with no prompt and no tool call, and a `deny` is refused with no tool call;
+ * - an MCP method then runs through OpenCode's own executor from `ctx.tool.list()`, which checks `<server>_<tool>`
+ *   against the agent's rules, the session's rules and saved approvals, and sends OpenCode's own credential;
+ * - a plugin-owned method runs its own spec, with its own `ctx.permission.assert` calls;
+ * - the `evaluate` hook still refuses any inner `ask` of this RPC's own calls in flight (their source ids), so an
+ *   inner action the method needs is named in the error, not left waiting;
+ * - a saved approval from an earlier "Always allow" is NOT part of `agent ++ session` rules, so it does not authorize
+ *   an ad-hoc script. That is deliberate (v2, D-F): a script's grant is a rule in config, or a Jobs run session.
  *
- * The executor bypasses `execute.before` and `execute.after` hooks, so `shapeResult` applies here whatever those
- * hooks do on the model path.
+ * Every known tool is a method, by exact name, with a class. A tool the server adds later is not a method until it is
+ * classified in the plugin's table; `describe` lists it as `unclassified`.
+ *
+ * The executor bypasses `execute.before` and `execute.after` hooks, so `shapeInput` runs before dispatch and
+ * `shapeResult` after it, whatever those hooks do on the model path.
  *
  * Shared module. Each plugin keeps its own copy, because each bundle is self-contained. Edit only the block between
  * the PLUGIN-SPECIFIC markers. Everything else is identical in every plugin: the plugin's `check-copies.mjs` fails
@@ -29,27 +33,36 @@ import { Rpc } from "@opencode/plugin/rpc"
 
 // >>> PLUGIN-SPECIFIC >>>
 
-import { SCRIPTABLE_TOOLS } from "../tools.js"
+import { KNOWN_TOOLS, SEND_TOOLS } from "../tools.js"
 
 /** The plugin's id. The RPC id is `<PLUGIN_ID>.tools`. */
 export const PLUGIN_ID = "slack.workspace"
 
 /**
- * The MCP tools that become methods, by their upstream name (the tool id without the `<server>_` prefix). Only known
- * reads belong here: an allowlist, so a tool the server adds later is never a method. Slack's are the twelve reads,
- * the private search and the file read from `src/tools.ts`; the last two ask by default, so a script is refused them
- * until an allow rule exists.
+ * Every tool Slack lists that only this plugin knows how to treat, by exact upstream name, with the class the tools
+ * RPC reports. An allowlist: a tool Slack adds later is not a method until it is classified in `src/tools.ts`, and
+ * `describe` lists it as unclassified. A read that asks by default (the private search, the file read) and a write
+ * that asks are still methods: the rules decide, so a script is refused until an allow rule exists.
  */
-export const KNOWN_READS: readonly string[] = SCRIPTABLE_TOOLS
+export const METHODS: readonly MethodSpec[] = Object.entries(KNOWN_TOOLS).map(([name, toolClass]): MethodSpec => ({
+  kind: "mcp",
+  name,
+  class: toolClass === "write" ? (SEND_TOOLS.includes(name) ? "send" : "write") : "read",
+}))
+
+/** What the model path's `execute.before` hooks do to an MCP call's arguments, which the executor skips. Slack has none. */
+export function shapeInput(_method: string, input: unknown, _call: ShapeCall): unknown {
+  return input
+}
 
 /** What the model path's `execute.after` hooks do to a result, which the executor skips. Slack has no such hook. */
-export function shapeResult(_method: string, result: McpResult): McpResult {
+export function shapeResult(_method: string, result: McpResult, _call: ShapeCall): McpResult {
   return result
 }
 
 /** The next step for each code. Each is one sentence that ends with a full stop. */
 export const NEXT_STEPS: NextSteps = {
-  SESSION_UNKNOWN: `Create a session that names an agent, such as POST /api/session with {"agent":"build"}, and pass its id.`,
+  SESSION_UNKNOWN: `Create a session in the location you mean, such as POST /api/session with {"agent":"build"} sent with the header "x-opencode-directory: <dir>" or the location[directory] query, and pass its id.`,
   SESSION_AGENT_REQUIRED: `Create a session that names an agent, such as POST /api/session with {"agent":"build"}, and pass its id.`,
   PERMISSION_DENIED: "Add an allow rule for the tool to the session's agent or to the session, or use a session whose agent allows it.",
   SERVER_CONFLICT: "Remove mcp.servers.slack from your OpenCode config.",
@@ -80,6 +93,58 @@ export interface McpResult {
   readonly output?: unknown
   readonly text: string
 }
+
+/** What a method can do. It never decides whether a call runs; the rules do. */
+export type MethodClass = "read" | "write" | "send" | "export" | "destructive"
+
+export const CLASSES: readonly MethodClass[] = ["read", "write", "send", "export", "destructive"]
+
+/** The session, agent and action a shaper runs for. */
+export interface ShapeCall {
+  readonly sessionID: string
+  readonly agent: string
+  readonly action: string
+}
+
+/** An MCP tool, classified. Its description and schemas come from the live tool. */
+export interface McpMethod {
+  readonly kind: "mcp"
+  readonly name: string
+  readonly class: MethodClass
+  /** `codemode: false` on the model path. Informational: every known tool is a method. */
+  readonly directOnly?: boolean
+}
+
+/**
+ * A plugin-owned tool, run through its own spec. Its asserts must pass
+ * `source: { type: "tool", messageID: call.messageID, id: call.id }`, as a tool does with its own context, so that
+ * the `evaluate` hook can tell this call's ask apart.
+ */
+export interface PluginMethod {
+  readonly kind: "plugin"
+  readonly class: MethodClass
+  readonly directOnly?: boolean
+  readonly name: string
+  /** The tool's permission action (its `options.permission`, or its id): the rule resolution uses it. */
+  readonly action: string
+  readonly description: string
+  /** The input's JSON Schema, for the contract and describe. OpenCode does not check it: `run` checks its own input. */
+  readonly input: JsonSchema
+  readonly output: JsonSchema
+  run(input: unknown, call: ToolCall): Promise<unknown>
+  /**
+   * Whether the method can run now, for describe only: undefined when it can, otherwise the plugin's own code for why
+   * not, such as a module that is turned off or has no build for this platform. Without it, describe reports the method
+   * as available. A call never consults it: `run` reports the same state as its own error.
+   */
+  available?(): string | undefined | Promise<string | undefined>
+}
+
+/** Every method: an MCP tool or a plugin-owned tool, each with a class. */
+export type MethodSpec = McpMethod | PluginMethod
+
+/** The v1 name for a plugin-owned method; kept so an adopting block reads the same. */
+export type OwnedMethod = PluginMethod
 
 /** Every code the module itself returns. ACCOUNT_UNKNOWN only with per-account servers. */
 type Code =
@@ -115,30 +180,25 @@ interface Failure {
   readonly next: string
 }
 
-/** A plugin-owned read tool, run through its own spec. */
-export interface OwnedMethod {
-  readonly name: string
-  /** The tool's permission action (its `options.permission`, or its id): the hidden-tool check uses it. */
-  readonly action: string
-  readonly description: string
-  /** The input's JSON Schema, for the contract and describe. OpenCode does not check it: `run` checks its own input. */
-  readonly input: JsonSchema
-  readonly output: JsonSchema
-  /**
-   * Runs the tool's own spec. Its asserts must pass `source: { type: "tool", messageID: call.messageID, id: call.id }`,
-   * as a tool does with its own context, so that the `evaluate` hook can tell this call's ask apart.
-   */
-  run(input: unknown, call: ToolCall): Promise<unknown>
-  /**
-   * Whether the method can run now, for describe only: undefined when it can, otherwise the plugin's own code for why
-   * not, such as a module that is turned off or has no build for this platform. Without it, describe reports the method
-   * as available. A call never consults it: `run` reports the same state as its own error.
-   */
-  available?(): string | undefined | Promise<string | undefined>
+/** The shapers a call uses. The block's `shapeInput` / `shapeResult` are the default. */
+export interface Shapers {
+  input?(method: string, input: unknown, call: ShapeCall): unknown
+  result?(method: string, result: McpResult, call: ShapeCall): McpResult
 }
 
 export interface ToolsRpcOptions {
-  /** The MCP server whose known reads are methods. */
+  /**
+   * The plugin's declared table. Pass the block's `METHODS`: one list, so the default rules, describe, the methods and
+   * the skills cannot drift apart. It is an argument rather than a module-level read so that a test can exercise the
+   * shared part with its own table.
+   */
+  readonly methods: readonly MethodSpec[]
+  /**
+   * Optional overrides for the block's shapers, for a plugin whose shapers are built at runtime. Omitted, the block's
+   * `shapeInput` and `shapeResult` are used. A test passes spies here to see the call order.
+   */
+  readonly shapers?: Shapers
+  /** The MCP server whose methods are `<server>_<name>`. Required when the table has any `kind: "mcp"` entry. */
   readonly mcp?: {
     /**
      * The server name. A function makes `account` part of the envelope and maps it to that account's server, or to
@@ -148,7 +208,7 @@ export interface ToolsRpcOptions {
     /** False while the name belongs to a server the plugin does not manage, such as the user's own. */
     readonly managed: (server: string) => boolean
     /**
-     * Optional. For a known read that OpenCode does not list, `describe` adds the text this returns as `detail`
+     * Optional. For a method that OpenCode does not list, `describe` adds the text this returns as `detail`
      * beside the code in `reason`, such as the toolset and option that turn the method on. Called with the method
      * name and that code; undefined adds nothing. Without it, describe is unchanged.
      */
@@ -160,8 +220,6 @@ export interface ToolsRpcOptions {
      */
     readonly notRegistered?: (server: string) => { readonly code: string; readonly next: string } | undefined
   }
-  /** Plugin-owned read tools. */
-  readonly owned?: readonly OwnedMethod[]
 }
 
 export type ToolsRpcContext = Pick<Plugin.Context, "rpc" | "permission" | "session" | "agent" | "tool" | "mcp" | "location">
@@ -191,6 +249,10 @@ const UNATTENDED = "A script cannot answer an approval prompt; this needs an all
 const MESSAGE_ID = "msg_script"
 const UPSTREAM_LIMIT = 300
 
+/** The header and query an external caller uses to name the location whose plugins and sessions it means. */
+export const LOCATION_HEADER = "x-opencode-directory"
+export const LOCATION_HINT = `Send the call to the location you mean: run it in that project with "opencode api ... -H \\"${LOCATION_HEADER}:$PWD\\"", or pass the location[directory] query parameter to the HTTP request.`
+
 const object = (properties: Record<string, JsonSchema>, required: readonly string[]): JsonSchema => ({
   type: "object",
   properties,
@@ -199,7 +261,6 @@ const object = (properties: Record<string, JsonSchema>, required: readonly strin
 })
 const STRING = { type: "string" } as const
 const ANY_OBJECT = { type: "object" } as const
-const NO_INPUT = object({}, [])
 const FAILED = object({ code: STRING, next: STRING }, ["code", "next"])
 const mcpOutput = (output: JsonSchema = {}) => object({ output, text: STRING }, ["text"])
 const DESCRIBED = object(
@@ -207,22 +268,29 @@ const DESCRIBED = object(
     name: STRING,
     tool: STRING,
     kind: { type: "string", enum: ["mcp", "plugin"] },
+    class: { type: "string", enum: [...CLASSES] },
     action: STRING,
     description: STRING,
     available: { type: "boolean" },
     reason: STRING,
     detail: STRING,
+    permission: { type: "string", enum: ["allow", "ask", "deny"] },
     input: ANY_OBJECT,
     output: ANY_OBJECT,
   },
-  ["name", "tool", "kind", "action", "description", "available", "input", "output"],
+  ["name", "tool", "kind", "class", "action", "description", "available", "input", "output"],
 )
-const DESCRIPTION = object({ id: STRING, call: STRING, location: STRING, methods: { type: "array", items: DESCRIBED } }, [
-  "id",
-  "call",
-  "location",
-  "methods",
-])
+const DESCRIPTION = object(
+  {
+    id: STRING,
+    call: STRING,
+    location: STRING,
+    locationHint: STRING,
+    methods: { type: "array", items: DESCRIBED },
+    unclassified: { type: "array", items: STRING },
+  },
+  ["id", "call", "location", "locationHint", "methods"],
+)
 
 const plainObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
 
@@ -234,15 +302,24 @@ const ENVELOPE_MESSAGES = {
   account: `"account" must be a non-empty string`,
   inputMissing: `"input" is missing`,
   inputNotObject: `"input" must be an object`,
-  describe: "describe takes no input",
+  describe: `describe takes nothing, or {"sessionID":"<session>"}`,
 } as const
 
 const standard = (schema: JsonSchema, validate: (value: unknown) => unknown): JsonSchema =>
   Object.defineProperty({ ...schema }, "~standard", { value: { version: 1, vendor: "tools-rpc", validate }, enumerable: false })
 
-/** describe's input: nothing, or an empty object. Anything else gets one plain message. */
-const DESCRIBE_INPUT = standard(NO_INPUT, (value) =>
-  value === undefined || value === null || (plainObject(value) && Object.keys(value).length === 0) ? { value } : { issues: [{ message: ENVELOPE_MESSAGES.describe }] },
+/** describe's input: nothing, or an object with one optional sessionID. */
+const DESCRIBE_INPUT = standard(
+  object({ sessionID: { type: "string", minLength: 1 } }, []),
+  (value) => {
+    if (value === undefined || value === null) return { value: {} }
+    if (!plainObject(value)) return { issues: [{ message: ENVELOPE_MESSAGES.describe }] }
+    const issues = [
+      ...Object.keys(value).filter((key) => key !== "sessionID").map(ENVELOPE_MESSAGES.unknownKey),
+      ...(value["sessionID"] === undefined || (typeof value["sessionID"] === "string" && value["sessionID"] !== "") ? [] : [ENVELOPE_MESSAGES.sessionID]),
+    ]
+    return issues.length === 0 ? { value } : { issues: issues.map((message) => ({ message })) }
+  },
 )
 
 /**
@@ -308,9 +385,15 @@ const deniedAction = (message: string): string | undefined => /^Permission denie
 const wildcard = (pattern: string, value: string) =>
   new RegExp(`^${pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")}$`).test(value)
 
+/**
+ * The host's evaluation for one action on resource `*`: the last matching rule wins, and no match asks. This is the
+ * whole of the resolve-before-dispatch rule; `hidden` is the same predicate, under its model-path name.
+ */
+export const evaluate = (rules: readonly Rule[], action: string): Rule["effect"] =>
+  rules.findLast((rule) => wildcard(rule.action, action) && wildcard(rule.resource, "*"))?.effect ?? "ask"
+
 /** OpenCode hides a tool from the model when the last rule matching its action on `*` is a deny. */
-export const hidden = (rules: readonly Rule[], action: string) =>
-  rules.findLast((rule) => wildcard(rule.action, action) && wildcard(rule.resource, "*"))?.effect === "deny"
+export const hidden = (rules: readonly Rule[], action: string) => evaluate(rules, action) === "deny"
 
 /** Token shapes, replaced in order. URLs are handled first, by `withoutQuery`. */
 const SECRETS: readonly [RegExp, string][] = [
@@ -371,15 +454,22 @@ const STATUS_TEXT: Record<string, string> = {
 }
 
 export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOptions): Promise<() => Promise<void>> {
-  const { mcp, owned = [] } = options
+  const { mcp, methods } = options
+  const shapeIn = options.shapers?.input ?? shapeInput
+  const shapeOut = options.shapers?.result ?? shapeResult
   const accounts = typeof mcp?.server === "function"
-  if (KNOWN_READS.length > 0 && !mcp) throw new Error("registerToolsRpc: KNOWN_READS needs the mcp option")
+  const anyMcp = methods.some((method) => method.kind === "mcp")
+  if (anyMcp && !mcp) throw new Error("registerToolsRpc: an MCP method needs the mcp option")
   if (accounts && NEXT_STEPS.ACCOUNT_UNKNOWN === undefined) throw new Error("registerToolsRpc: per-account servers need NEXT_STEPS.ACCOUNT_UNKNOWN")
-  const missing = KNOWN_READS.length > 0 ? MCP_ONLY.find((code) => code !== "SERVER_CONFLICT" && NEXT_STEPS[code] === undefined) : undefined
+  const missing = anyMcp ? MCP_ONLY.find((code) => code !== "SERVER_CONFLICT" && NEXT_STEPS[code] === undefined) : undefined
   if (missing) throw new Error(`registerToolsRpc: MCP methods need NEXT_STEPS.${missing}`)
-  const names = [...KNOWN_READS, ...owned.map((method) => method.name)]
+  const names = methods.map((method) => method.name)
   const duplicate = names.find((name, index) => name === "describe" || names.indexOf(name) !== index)
   if (duplicate) throw new Error(`registerToolsRpc: the method name "${duplicate}" is taken`)
+  for (const method of methods) {
+    if (!CLASSES.includes(method.class)) throw new Error(`registerToolsRpc: ${method.name} has the class "${String(method.class)}"; use one of ${CLASSES.join(", ")}`)
+    if (method.kind === "plugin" && (typeof method.run !== "function" || method.action === "")) throw new Error(`registerToolsRpc: the plugin method ${method.name} needs a run function and an action`)
+  }
 
   // This RPC's calls in flight, by the source id their permission checks carry.
   const live = new Set<string>()
@@ -393,6 +483,10 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
     throw new ScriptError({ code: "ACCOUNT_UNKNOWN", what: `there is no account '${account}'`, next: NEXT_STEPS.ACCOUNT_UNKNOWN! })
   }
 
+  /** The action a method resolves and asserts. For an MCP tool, the host's `<server>_<tool>`. */
+  const actionOf = (method: MethodSpec, envelope: Envelope): string =>
+    method.kind === "plugin" ? method.action : `${serverOf(envelope.account)}_${method.name}`
+
   /** The session's agent and the rules that decide what its model sees: the agent's, then the session's. */
   const session = async (sessionID: string) => {
     let info: Awaited<ReturnType<ToolsRpcContext["session"]["get"]>>
@@ -400,13 +494,16 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
       info = await ctx.session.get({ sessionID: sessionID as never })
     } catch (error) {
       // Only OpenCode's "no such session" is SESSION_UNKNOWN; any other failure propagates as it is.
-      if (notFound(error, ["Session.NotFoundError", "SessionNotFoundError"])) throw fail("SESSION_UNKNOWN", `there is no session '${sessionID}'`)
+      if (notFound(error, ["Session.NotFoundError", "SessionNotFoundError"])) throw fail("SESSION_UNKNOWN", `there is no session '${sessionID}' in this location`)
       throw error
     }
     if (!info.agent) throw fail("SESSION_AGENT_REQUIRED", `session '${sessionID}' names no agent`)
     let agent: Awaited<ReturnType<ToolsRpcContext["agent"]["get"]>>
     try {
-      agent = await ctx.agent.get({ agentID: info.agent, location: info.location })
+      // No location argument: the session was read in this plugin's own location, and the agent is looked up there.
+      // Passing `info.location` back (a Location.Ref, which can carry a workspace) made a project-level plugin fail
+      // with "Agent not found" on 2.2.3/2.2.4, so the location is left to the context, which is per location.
+      agent = await ctx.agent.get({ agentID: info.agent })
     } catch (error) {
       if (notFound(error, ["Agent.NotFoundError", "AgentNotFoundError"])) throw fail("SESSION_AGENT_REQUIRED", `session '${sessionID}' names the agent '${info.agent}', which does not exist`)
       throw error
@@ -450,8 +547,8 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
   }
 
   /**
-   * A check a deny rule refused, the method's own or an inner one such as the read Plaud's recent makes: the message
-   * names the action as for an ask, and the next step says to change the rule, naming the session's agent.
+   * A check a deny rule refused, the method's own or an inner one such as the read Plaud's recent makes. A rule deny
+   * never reaches the hook, so its action comes from OpenCode's own text.
    */
   const ruleDenied = (action: string, error: unknown, agent: string, inner = action) => {
     const reason = upstreamText(record(error) && typeof error["message"] === "string" ? error["message"] : String(error))
@@ -459,63 +556,82 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
     return new ScriptError({ code: "PERMISSION_DENIED", what, next: denyNext(inner, agent) })
   }
 
-  /** A method's call: the permission action the hidden-tool check uses, and how it runs as the session. */
+  /**
+   * The resolve before dispatch: only `allow` runs. An `ask` is refused because no one can answer it, and a `deny`
+   * because a rule refuses it. Both refuse with no tool call and no prompt.
+   */
+  const resolve = (rules: readonly Rule[], action: string, agent: string) => {
+    const effect = evaluate(rules, action)
+    if (effect === "allow") return
+    if (effect === "ask")
+      throw new ScriptError({
+        code: "PERMISSION_DENIED",
+        what: `${action} would ask for this session's agent, and a script cannot answer`,
+        next: `Add an allow rule for ${action} to the session's agent or to the session, or use a session whose agent allows it.`,
+      })
+    if (hidden(rules, action)) throw new ScriptError({ code: "PERMISSION_DENIED", what: `${action} is hidden from this session's agent by a deny rule`, next: denyNext(action, agent) })
+    throw new ScriptError({ code: "PERMISSION_DENIED", what: `${action} is denied for this session's agent`, next: denyNext(action, agent) })
+  }
+
+  /** A method's call: how it runs as the session, and the call it runs with. */
   interface Target {
     readonly action: string
-    readonly mcp: boolean
+    readonly method: MethodSpec
     run(call: ToolCall): Promise<unknown>
   }
 
-  const mcpTarget = (name: string, envelope: Envelope): Target => {
-    const server = serverOf(envelope.account)
-    const action = `${server}_${name}`
-    return {
-      action,
-      mcp: true,
-      async run(call) {
-        if (!mcp!.managed(server)) {
-          throw new ScriptError({ code: "SERVER_CONFLICT", what: `the "${server}" server in your config is not the one this plugin manages`, next: conflictNext(server) })
-        }
-        const tool = (await ctx.tool.list()).find((entry) => entry.id === action)
-        if (!tool) throw await unavailable(server, action, "TOOL_UNAVAILABLE")
-        let result: ToolResult
-        try {
-          // OpenCode asserts `action` on `*` inside the executor, for the call's session and agent.
-          result = await tool.execute(envelope.input as never, call as never)
-        } catch (error) {
-          // OpenCode's fixed message for a call to a server that is not connected.
-          if (error instanceof Error && error.message.startsWith(`MCP server "${server}" `)) throw await unavailable(server, action, "CONNECTING")
-          throw error
-        }
-        return shapeResult(name, normalise(result))
-      },
-    }
-  }
+  const mcpTarget = (method: McpMethod, envelope: Envelope, action: string, server: string): Target => ({
+    action,
+    method,
+    async run(call) {
+      if (!mcp!.managed(server)) {
+        throw new ScriptError({ code: "SERVER_CONFLICT", what: `the "${server}" server in your config is not the one this plugin manages`, next: conflictNext(server) })
+      }
+      const tool = (await ctx.tool.list()).find((entry) => entry.id === action)
+      if (!tool) throw await unavailable(server, action, "TOOL_UNAVAILABLE")
+      const shaped = shapeIn(method.name, envelope.input, { sessionID: call.sessionID, agent: call.agent, action })
+      let result: ToolResult
+      try {
+        // OpenCode asserts `action` on `*` inside the executor, for the call's session and agent.
+        result = await tool.execute(shaped as never, call as never)
+      } catch (error) {
+        // OpenCode's fixed message for a call to a server that is not connected.
+        if (error instanceof Error && error.message.startsWith(`MCP server "${server}" `)) throw await unavailable(server, action, "CONNECTING")
+        throw error
+      }
+      const shapedResult = shapeOut(method.name, normalise(result), { sessionID: call.sessionID, agent: call.agent, action })
+      return shapedResult
+    },
+  })
 
-  const ownedTarget = (spec: OwnedMethod, envelope: Envelope): Target => {
+  const pluginTarget = (method: PluginMethod, envelope: Envelope, action: string): Target => {
     // With per-account servers, an unknown account is ACCOUNT_UNKNOWN before the spec runs, as for an MCP method.
     if (accounts) serverOf(envelope.account)
     const account = accounts && envelope.account !== undefined ? { account: envelope.account } : {}
     return {
-      action: spec.action,
-      mcp: false,
-      run: async (call) => (await spec.run(envelope.input, { ...call, ...account })) ?? null,
+      action,
+      method,
+      run: async (call) => (await method.run(envelope.input, { ...call, ...account })) ?? null,
     }
   }
 
-  const invoke = async (target: (envelope: Envelope) => Target, raw: unknown, context: RpcContext) => {
+  const targetOf = (method: MethodSpec, envelope: Envelope): Target => {
+    const action = actionOf(method, envelope)
+    if (method.kind === "plugin") return pluginTarget(method, envelope, action)
+    return mcpTarget(method, envelope, action, serverOf(envelope.account))
+  }
+
+  const invoke = async (method: MethodSpec, raw: unknown, context: RpcContext) => {
     const envelope = raw as Envelope
-    let method: Target | undefined
+    let target: Target | undefined
     let id: string | undefined
     let agent: string | undefined
     try {
       if (context.signal.aborted) throw fail("CANCELLED", "the call was cancelled")
-      method = target(envelope)
+      target = targetOf(method, envelope)
       const resolved = await session(envelope.sessionID)
       agent = resolved.agent
-      if (hidden(resolved.rules, method.action)) {
-        throw new ScriptError({ code: "PERMISSION_DENIED", what: `${method.action} is hidden from this session's agent by a deny rule`, next: denyNext(method.action, agent) })
-      }
+      resolve(resolved.rules, target.action, agent)
       id = `script:${randomUUID()}`
       const call: ToolCall = {
         sessionID: envelope.sessionID,
@@ -528,12 +644,12 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
       live.add(call.id)
       try {
         // RPC output must be a JSON value.
-        return JSON.parse(JSON.stringify(await method.run(call)))
+        return JSON.parse(JSON.stringify(await target.run(call)))
       } finally {
         live.delete(call.id)
       }
     } catch (error) {
-      const failure = refusal(error, method, context.signal, agent, id === undefined ? undefined : refused.get(id))
+      const failure = refusal(error, target, context.signal, agent, id === undefined ? undefined : refused.get(id))
       if (!failure) throw error
       return context.error("failed", new ScriptError(failure).message, { code: failure.code, next: failure.next })
     } finally {
@@ -544,7 +660,7 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
   /** The failure a script reads, or undefined for a host error that propagates unchanged. */
   const refusal = (
     error: unknown,
-    method: Target | undefined,
+    target: Target | undefined,
     signal: AbortSignal,
     agent: string | undefined,
     seen?: { readonly action: string; readonly effect: "ask" | "deny" },
@@ -552,68 +668,92 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
     if (signal.aborted) return fail("CANCELLED", "the call was cancelled").failure
     if (error instanceof ScriptError) return error.failure
     const own = pluginError(error)
-    if (own || !method || !toolError(error)) return own
+    if (own || !target || !toolError(error)) return own
     // A deny, or an ask the hook refused, carries its cause; an upstream failure (MCP `isError`) has none.
     if (error.error !== undefined) {
       const request = requestAction(error.error)
-      // An ask: the hook refused it, or the cause carries its request (only an ask has one). As before.
-      if (seen?.effect === "ask" || request !== undefined || agent === undefined) return denied(method.action, error, request ?? seen?.action).failure
+      // An ask: the hook refused it, or the cause carries its request (only an ask has one).
+      if (seen?.effect === "ask" || request !== undefined || agent === undefined) return denied(target.action, error, request ?? seen?.action).failure
       // A deny: a rule deny reaches no hook and carries no request, so OpenCode's own text names its action.
-      return ruleDenied(method.action, error, agent, seen?.action ?? deniedAction(error.message) ?? method.action).failure
+      return ruleDenied(target.action, error, agent, seen?.action ?? deniedAction(error.message) ?? target.action).failure
     }
-    if (method.mcp) return fail("UPSTREAM_ERROR", `${method.action} failed: ${upstreamText(error.message)}`).failure
+    if (target.method.kind === "mcp") return fail("UPSTREAM_ERROR", `${target.action} failed: ${upstreamText(error.message)}`).failure
     return undefined
   }
 
-  const describe = async () => {
+  /**
+   * The live tools this table does not classify, by their upstream name. Never methods. A plugin-owned tool can also be
+   * registered under the server's namespace, so a tool whose declared permission is one of this plugin's own actions
+   * is not an unclassified MCP tool.
+   */
+  const unclassified = async (tools: readonly Tool[]) => {
+    const server = serverOf(undefined)
+    const prefix = `${server}_`
+    const known = new Set(methods.filter((method) => method.kind === "mcp").map((method) => method.name))
+    // A plugin-owned tool may be registered under the server's namespace; its short id is the plugin method's name.
+    const owned = new Set(methods.filter((method) => method.kind === "plugin").flatMap((method) => [method.name, method.action]))
+    return tools
+      .filter((tool) => tool.id.startsWith(prefix) && !known.has(tool.id.slice(prefix.length)) && !owned.has(tool.id.slice(prefix.length)))
+      .map((tool) => tool.id.slice(prefix.length))
+      .sort()
+  }
+
+  const describe = async (raw: unknown) => {
+    const input = (raw ?? {}) as { readonly sessionID?: string }
+    const resolved = input.sessionID === undefined ? undefined : await session(input.sessionID)
     const tools = mcp ? await ctx.tool.list() : []
-    const methods: Record<string, unknown>[] = []
-    if (mcp) {
-      const server = serverOf(undefined)
-      const managed = mcp.managed(server)
-      const status = managed ? (await ctx.mcp.list()).data.find((entry) => entry.name === server)?.status.status : undefined
-      for (const name of KNOWN_READS) {
-        const id = `${server}_${name}`
+    // One server lookup and one mcp.list() for the whole describe, whatever the number of MCP methods.
+    const server = anyMcp ? serverOf(undefined) : ""
+    const managed = mcp !== undefined && server !== "" ? mcp.managed(server) : false
+    const status = managed ? (await ctx.mcp.list()).data.find((entry) => entry.name === server)?.status.status : undefined
+    const methodsOut: Record<string, unknown>[] = []
+    for (const method of methods) {
+      if (method.kind === "mcp") {
+        const id = `${server}_${method.name}`
         const tool = managed ? tools.find((entry) => entry.id === id) : undefined
         const code: Code | undefined = !managed ? "SERVER_CONFLICT" : tool ? undefined : (connection(status) ?? "TOOL_UNAVAILABLE")
         const reason = code === "NOT_REGISTERED" ? (notRegistered(server)?.code ?? code) : code
-        const detail = code === undefined ? undefined : mcp.unavailableDetail?.(name, code)
-        const input = jsonSchema(tool?.input) ?? ANY_OBJECT
-        const output = jsonSchema(tool?.output)
-        methods.push({
-          name,
+        const detail = code === undefined ? undefined : mcp!.unavailableDetail?.(method.name, code)
+        methodsOut.push({
+          name: method.name,
           tool: id,
           kind: "mcp",
+          class: method.class,
           action: id,
           description: tool?.description ?? "",
           available: reason === undefined,
           ...(reason ? { reason } : {}),
           ...(detail === undefined ? {} : { detail }),
-          input,
-          output: mcpOutput(output),
+          ...(resolved ? { permission: evaluate(resolved.rules, id) } : {}),
+          input: jsonSchema(tool?.input) ?? ANY_OBJECT,
+          output: mcpOutput(jsonSchema(tool?.output)),
         })
+        continue
       }
-    }
-    for (const spec of owned) {
-      const reason = await spec.available?.()
-      methods.push({
-        name: spec.name,
-        tool: spec.name,
+      const reason = await method.available?.()
+      methodsOut.push({
+        name: method.name,
+        tool: method.name,
         kind: "plugin",
-        action: spec.action,
-        description: spec.description,
+        class: method.class,
+        action: method.action,
+        description: method.description,
         available: reason === undefined,
         ...(reason === undefined ? {} : { reason }),
-        input: spec.input,
-        output: spec.output,
+        ...(resolved ? { permission: evaluate(resolved.rules, method.action) } : {}),
+        input: method.input,
+        output: method.output,
       })
     }
+    const loose = mcp && mcp.managed(serverOf(undefined)) ? await unclassified(tools) : []
     return JSON.parse(
       JSON.stringify({
         id: TOOLS_RPC_ID,
         call: `POST /api/rpc/${TOOLS_RPC_ID}/<method> with {"input":{"sessionID":"<session>",${accounts ? `"account":"<account>",` : ""}"input":<the tool's input>}}`,
         location: ctx.location.directory,
-        methods,
+        locationHint: LOCATION_HINT,
+        methods: methodsOut,
+        ...(loose.length > 0 ? { unclassified: loose } : {}),
       }),
     )
   }
@@ -630,16 +770,28 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
   const contract = Rpc.define({
     id: TOOLS_RPC_ID,
     methods: {
-      describe: { input: DESCRIBE_INPUT, output: DESCRIPTION },
-      ...Object.fromEntries(KNOWN_READS.map((name) => [name, { input: envelope(ANY_OBJECT, true), output: mcpOutput(), errors: { failed: FAILED } }])),
-      ...Object.fromEntries(owned.map((spec) => [spec.name, { input: envelope(spec.input, false), output: spec.output, errors: { failed: FAILED } }])),
+      describe: { input: DESCRIBE_INPUT, output: DESCRIPTION, errors: { failed: FAILED } },
+      ...Object.fromEntries(
+        methods.map((method) => [
+          method.name,
+          method.kind === "mcp"
+            ? { input: envelope(ANY_OBJECT, true), output: mcpOutput(), errors: { failed: FAILED } }
+            : { input: envelope(method.input, false), output: method.output, errors: { failed: FAILED } },
+        ]),
+      ),
     },
     events: {},
   } as never)
   const handlers = {
-    describe: () => describe(),
-    ...Object.fromEntries(KNOWN_READS.map((name) => [name, (raw: unknown, context: RpcContext) => invoke((envelope) => mcpTarget(name, envelope), raw, context)])),
-    ...Object.fromEntries(owned.map((spec) => [spec.name, (raw: unknown, context: RpcContext) => invoke((envelope) => ownedTarget(spec, envelope), raw, context)])),
+    describe: async (raw: unknown, context: RpcContext) => {
+      try {
+        return await describe(raw)
+      } catch (error) {
+        if (!(error instanceof ScriptError)) throw error
+        return context.error("failed", error.message, { code: error.failure.code, next: error.failure.next })
+      }
+    },
+    ...Object.fromEntries(methods.map((method) => [method.name, (raw: unknown, context: RpcContext) => invoke(method, raw, context)])),
   }
   const registration = await ctx.rpc.register(contract, handlers as never)
 

@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process"
 import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { basename, join, relative, sep } from "node:path"
 import { gunzipSync } from "node:zlib"
-import { KNOWN_READS, TOOLS_RPC_ID } from "../../src/host/tools-rpc.js"
+import { METHODS, TOOLS_RPC_ID } from "../../src/host/tools-rpc.js"
 import { defaultRules } from "../../src/permissions.js"
 import type { Status } from "../../src/status.js"
 import { CLIENT_ID, HOST_VERSIONS, isolatedEnv, removeInstalls, REPO, startBinary, tempDirectory } from "../host/harness.js"
@@ -207,7 +207,7 @@ describe.each(HOST_VERSIONS)("the installed package on stock opencode %s", (vers
       expect(build?.permissions.slice(at + 1, at + 1 + rules.length)).toEqual(rules)
       expect((await host.client.skill.list({ location })).data.map((skill) => skill.id)).toContain("slack-search")
       const tools = (await host.client.rpc.call({ rpcID: TOOLS_RPC_ID, method: "describe", location, input: {} })).output as { methods: { name: string }[] }
-      expect(tools.methods.map((method) => method.name)).toEqual([...KNOWN_READS])
+      expect(tools.methods.map((method) => method.name)).toEqual(METHODS.map((method) => method.name))
       const paths = (await host.client.rpc.call({ rpcID: "slack.test.probe", method: "paths", location, input: {} })).output as Record<string, string>
       expect(Object.keys(paths).length).toBeGreaterThan(0)
       expect(Object.entries(paths).filter(([, path]) => !path.startsWith(host.root + sep))).toEqual([])

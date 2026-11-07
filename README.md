@@ -49,12 +49,15 @@ The Slack tools are Slack's own. With Code Mode, which is on by default, agents 
 
 ### Scripts
 
-A script or a cron job can call Slack's fourteen read tools with no model, through `opencode api`. It runs as a session and its agent, under that agent's permission rules and the session's own. The private search and the file read ask by default, so a script needs an allow rule for them. Writes and sends are never available to scripts:
+A script or a cron job can call every Slack tool this plugin knows with no model, through `opencode api`: the fourteen reads, the three sends and the ten writes. It runs as a session and its agent, under that agent's permission rules and the session's own. The rule is resolved first, so only an `allow` runs: the private search, the file read and every write and send need a prior allow rule, and an `ask` is refused because no one can answer it. A saved "Always allow" does not authorize an ad-hoc script; a Jobs `jobs_run_script` one-off does, with the user's approval:
 
 ```sh
 opencode api post /api/rpc/slack.workspace.tools/slack_search_public \
+  -H "x-opencode-directory:$PWD" \
   -d '{"input":{"sessionID":"ses_…","input":{"query":"launch date","limit":10}}}'
 ```
+
+Without `x-opencode-directory:$PWD` the call reaches the service's default location and fails `rpc.unavailable` when the plugin is not loaded there.
 
 See [Scripting](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/scripting.md).
 

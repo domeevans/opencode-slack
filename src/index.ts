@@ -2,7 +2,7 @@ import { Plugin } from "@opencode/plugin"
 import { SERVER } from "./defaults.js"
 import { registerAppIntegration, resolveClient, sameClient, serverNamer, type ClientState } from "./connect.js"
 import { isSupportedHost, isTestedHost } from "./host-version.js"
-import { registerToolsRpc } from "./host/tools-rpc.js"
+import { METHODS, registerToolsRpc } from "./host/tools-rpc.js"
 import { parseOptions } from "./options.js"
 import { insertDefaultRules } from "./permissions.js"
 import { SlackRpc } from "./rpc.js"
@@ -136,13 +136,15 @@ export default Plugin.define({
       },
     })
 
-    // Scripts call the known reads with no model, as a session and its agent. A user's own server under the name is
-    // not this plugin's. Invalid options or an untested host register no server, so no tools RPC either. Without a
-    // usable client ID there is no server either: a call gets status's code and next step, read at each call, so a
-    // client saved in /connect applies at once.
+    // Scripts call every known Slack tool with no model, as a session and its agent: reads run when the rules allow
+    // them, a write or a private read needs an allow first. A user's own server under the name is not this plugin's.
+    // Invalid options or an untested host register no server, so no tools RPC either. Without a usable client ID there
+    // is no server either: a call gets status's code and next step, read at each call, so a client saved in /connect
+    // applies at once.
     const stopTools = options === undefined
       ? async () => {}
       : await registerToolsRpc(ctx, {
+        methods: METHODS,
         mcp: {
           server: SERVER,
           managed: () => !nameInUse,
