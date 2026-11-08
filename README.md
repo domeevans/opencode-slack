@@ -49,7 +49,7 @@ The Slack tools are Slack's own. With Code Mode, which is on by default, agents 
 
 ### Scripts
 
-A script or a cron job can call every Slack tool this plugin knows with no model, through `opencode api`: the fourteen reads, the three sends and the ten writes. It runs as a session and its agent, under that agent's permission rules and the session's own. The rule is resolved first, so only an `allow` runs: the private search, the file read and every write and send need a prior allow rule, and an `ask` is refused because no one can answer it. A saved "Always allow" does not authorize an ad-hoc script; a Jobs `jobs_run_script` one-off does, with the user's approval:
+A script or a cron job can call every Slack tool this plugin knows with no model, through `opencode api`: the fourteen reads, the three sends and the ten writes. It runs as a session and its agent, under that agent's permission rules and the session's own. The rule is resolved first, so only an `allow` runs. **A script gets the same default as the model:** at `access: "all"` the plugin's block allows every tool, so a script can read and write everything the account can. Set `access: "ask-changes"` or `"read-only"`, or add a later rule, to restrict it; an `ask` is refused because no one can answer it. A saved "Always allow" does not authorize an ad-hoc script; a Jobs `jobs_run_script` one-off does, with the user's approval:
 
 ```sh
 opencode api post /api/rpc/slack.workspace.tools/slack_search_public \
@@ -63,42 +63,76 @@ See [Scripting](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/s
 
 ## Permissions
 
-**What runs without asking:** the known read tools, such as `slack_search_public`, `slack_read_thread` and `slack_read_canvas`. [Tool classes](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#tool-classes) lists every tool.
+**Every tool is allowed by default.** An agent can search and read any message, thread, canvas or file the signed-in account can see, the private-channel search and file reads included, and it can send messages, create canvases and lists, react and upload files, all without asking. Nothing here is a safety net: the scopes you granted decide what is possible. Restrict it in any of these three ways.
 
-**What asks first:**
+1. **The `access` option**, which generates the rules the plugin inserts:
 
-- private search: `slack_search_public_and_private`;
-- file reads: `slack_read_file`;
-- writes: sending, drafting and scheduling messages, adding reactions, creating and updating canvases and lists, creating conversations, and file uploads;
-- any Slack tool the plugin does not know yet.
+   | Value | What runs | What asks or is denied |
+   | --- | --- | --- |
+   | `"all"` (the default) | every tool, and any tool Slack adds later | nothing |
+   | `"ask-changes"` | the read tools | the private-channel search, file reads, writes and sends, and new tools: they ask |
+   | `"read-only"` | the read tools | the private-channel search, file reads, writes and sends, and new tools: they are **denied** |
 
-The read tools read whatever your scopes reach. With the default scopes, that is public channels. If you add `groups:history`, `im:history` or `mpim:history`, `slack_read_channel` and `slack_read_thread` also read private channels and direct messages without asking; only the search across them asks. To make those reads ask too, add `{ "action": "slack_slack_read_channel", "resource": "*", "effect": "ask" }`, and the same for `slack_slack_read_thread` and `slack_slack_list_user_channels`.
+   ```jsonc
+   { "plugins": [{ "package": "@joe-broadhead/opencode-slack", "options": { "access": "read-only" } }] }
+   ```
 
-The plugin adds these defaults as rules right after each agent's base `allow` rule. OpenCode uses the last matching rule, so these all override the defaults:
+   The default block, generated from `defaultRules()` for `access: "all"`:
 
-- the agent's own built-in rules: Explore, Title and Summary still deny Slack, and Plan keeps its limits;
-- your `permissions`;
-- your "Always allow" answers.
+   ```json
+   [
+     { "action": "slack_*", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_search_public", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_search_channels", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_search_users", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_read_channel", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_read_thread", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_read_user_profile", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_read_canvas", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_list_channel_members", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_get_reactions", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_list_user_channels", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_read_list", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_search_emojis", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_search_public_and_private", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_read_file", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_send_message", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_send_message_draft", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_schedule_message", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_create_canvas", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_update_canvas", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_add_reaction", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_get_file_upload_url", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_complete_file_upload", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_create_conversation", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_create_list", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_update_list", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_add_list_record", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_update_list_record", "resource": "*", "effect": "allow" }
+   ]
+   ```
 
-**Allow** a tool that asks: choose **Always allow** when OpenCode asks, or add a rule to `permissions`:
+   [The access option](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#the-access-option) prints the block for `ask-changes` and `read-only` too.
 
-```jsonc
-"permissions": [
-  { "action": "slack_slack_read_file", "resource": "*", "effect": "allow" }
-]
-```
+2. **An agent that is read-only or asks**, with rules of its own, later than the plugin's:
 
-"Always allow" applies to every agent in the current project, Plan included.
+   ```jsonc
+   { "agents": { "reader": { "permissions": [
+     { "action": "slack_*", "resource": "*", "effect": "deny" },
+     { "action": "slack_slack_search_public", "resource": "*", "effect": "allow" },
+     { "action": "slack_slack_read_thread", "resource": "*", "effect": "allow" }
+   ] } } }
+   ```
 
-**Deny** a tool with `"effect": "deny"`. A deny always wins, even over "Always allow", and it hides the tool from the model. `{ "action": "slack_*", "resource": "*", "effect": "deny" }` denies every Slack tool.
+3. **Per-tool rules**, in `permissions` or in an agent's own: `{ "action": "slack_slack_send_message", "resource": "*", "effect": "ask" }` makes sending ask, and `deny` refuses it. `{ "action": "slack_*", "resource": "*", "effect": "deny" }` denies every Slack tool. A later rule wins, and a saved "Always allow" still applies after your rules.
 
-The `slack_*` rule also matches tools of any other MCP server whose name starts with `slack_`, so those tools ask too.
+**Why the names read `slack_slack_search_public`.** Slack's own server names its tools `slack_<tool>`, and OpenCode prefixes an MCP tool with its server's name, which is `slack`. The permission action is that full name, so a rule is `slack_slack_search_public`. It is the exact name to use in a rule; renaming it would break saved rules, so it stays.
 
 ### Agents without the default rules
 
-OpenCode creates some agents after the plugin adds its rules, so they get none: agents defined only in your config (`agents.<id>` entries that are not built-in agents, and Markdown agent files), and agents added by plugins that load after this one. These agents run Slack writes and unknown Slack tools **without asking**. Status names them in its `Agents without default rules` row and prints the rules to paste.
+OpenCode creates some agents after the plugin adds its rules, so they get none: agents defined only in your config (`agents.<id>` entries that are not built-in agents, and Markdown agent files), and agents added by plugins that load after this one. These agents run Slack tools **under OpenCode's own default**, not this plugin's block. Status names them in its `Agents without default rules` row and prints the rules to paste.
 
-**Fix:** put the plugin's default block first in **that agent's own** `permissions` (in `opencode.json`, or the agent's Markdown file), followed by your top-level rules for Slack tools, so they keep winning for that agent. The block is the `slack_*` ask rule, then one allow rule per read tool, such as `{ "action": "slack_slack_search_public", "resource": "*", "effect": "allow" }`. `/slack-status` prints the exact block to paste; [The inserted rules](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#the-inserted-rules) lists it too.
+**Fix:** put the plugin's block first in **that agent's own** `permissions` (in `opencode.json`, or the agent's Markdown file), followed by your top-level rules for Slack tools, so they keep winning for that agent. `/slack-status` prints the exact block to paste for the `access` you set; [The inserted rules](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#the-inserted-rules) explains it.
 
 Do not put this block in the top-level `permissions`. OpenCode adds top-level rules to every agent after its built-in rules, so the block would loosen agents that deny Slack, such as Explore.
 

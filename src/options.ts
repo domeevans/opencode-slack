@@ -1,5 +1,10 @@
 import { CALLBACK_PORT_EXAMPLE, DEFAULT_REDIRECT_URI, DEFAULT_SCOPES, HOSTED_REDIRECT_EXAMPLE } from "./defaults.js"
 
+/** What the default rules allow. `all` is the default; the other two are how a user restricts the plugin. */
+export type Access = "all" | "ask-changes" | "read-only"
+
+export const ACCESS_VALUES: readonly Access[] = ["all", "ask-changes", "read-only"]
+
 export interface Options {
   /** Pins the Slack app, for example in an organisation's managed config. Otherwise the /connect Slack app client ID entry sets it. */
   readonly clientId?: string
@@ -9,6 +14,8 @@ export interface Options {
   readonly scopes: readonly string[]
   readonly clientSecret?: string
   readonly allowUntestedHost: boolean
+  /** What the generated default rules allow: everything, changes ask, or read-only. */
+  readonly access: Access
 }
 
 /** A rejected option. Messages name the field and never echo its value. */
@@ -23,7 +30,7 @@ export type ParsedOptions =
   | { readonly ok: true; readonly options: Options }
   | { readonly ok: false; readonly error: OptionsError }
 
-const TOP_KEYS = ["oauth", "allowUntestedHost"]
+const TOP_KEYS = ["oauth", "allowUntestedHost", "access"]
 const OAUTH_KEYS = ["client_id", "redirect_uri", "callback_port", "scopes", "client_secret"]
 const NO_SPACES = /^\S+$/
 
@@ -115,6 +122,11 @@ export function parseOptions(input: unknown): ParsedOptions {
     return fail("allowUntestedHost", "Must be true or false.", "Set it to true only to run on an OpenCode version outside the supported range.")
   }
 
+  const access = raw.access ?? "all"
+  if (typeof access !== "string" || !(ACCESS_VALUES as readonly string[]).includes(access)) {
+    return fail("access", 'Must be "all", "ask-changes" or "read-only".', 'Set access to "all" (the default), "ask-changes" or "read-only".')
+  }
+
   return {
     ok: true,
     options: {
@@ -124,6 +136,7 @@ export function parseOptions(input: unknown): ParsedOptions {
       scopes: [...scopes],
       ...(clientSecret === undefined ? {} : { clientSecret }),
       allowUntestedHost,
+      access: access as Access,
     },
   }
 }

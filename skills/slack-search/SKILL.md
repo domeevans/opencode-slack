@@ -26,7 +26,7 @@ Find, then read, then cite. The tools are Slack's own, in Code Mode's `slack` na
   - Slack silently ignores an ISO date in those two parameters, so your search would cover all time while your answer claims a range.
 - **Newest first:** `sort: "timestamp"`.
 - **A channel's ID:** `slack_search_channels({ query: "release" })`.
-- **Canvases:** search with `query: "type:canvases <topic>"` and `content_types: "files"`, then read one with `slack_read_canvas({ canvas_id: "F…" })`. Prefer it to `slack_read_file`, which asks the user first.
+- **Canvases:** search with `query: "type:canvases <topic>"` and `content_types: "files"`, then read one with `slack_read_canvas({ canvas_id: "F…" })`. Prefer it to `slack_read_file`: both work, and `slack_read_file` returns less structure.
 - **Recall:** several small searches find more than one big one. If nothing matches, drop modifiers, try synonyms, or switch between keywords and a plain question.
 - **Rate limits:** Slack limits each tool separately, and parallel searches hit the limit quickly.
   - Run searches one after another, not as a large `Promise.all`.
@@ -46,8 +46,8 @@ A hit is a fragment, so read around it before you answer:
 
 ## Private channels and DMs need the user's consent
 
-- **Private search asks first:** `slack_search_public_and_private` makes OpenCode ask the user before it runs. Use it only for private content the user asked about, and tell them first that OpenCode will ask.
-- **Some reads don't ask, so you must:** `slack_read_channel` with a user ID or a `D…` ID, and `slack_list_user_channels` with `types` that include `im` or `mpim`, read the same private content without a prompt. Ask the user yourself before you use them that way.
+- **Nothing asks by default, so you must.** Every tool is allowed, so `slack_search_public_and_private`, `slack_read_file`, `slack_read_channel` with a user ID or a `D…` ID, and `slack_list_user_channels` with `types` that include `im` or `mpim` all run without a prompt. Ask the user before you read private content, and say which tool you will use.
+- **When the user restricts it:** with `access: "ask-changes"` OpenCode asks before the private search and file reads, and before every write; with `"read-only"` it denies them. `/slack-status` shows what the access allows.
 - **The default scopes refuse private search:** Slack answers `missing_scope` even after the user approves. Say that DMs and private channels were not searched, and point to the `Scopes` row of `/slack-status`; the missing scopes are `search:read.private`, `search:read.im` and `search:read.mpim`.
 - **A decline is final:** don't retry, and don't reach the same content another way. Continue with public results, and say what was not searched. If you tell the user how to run it later, add that the default scopes would refuse it anyway, and point to the `Scopes` row of `/slack-status`.
 
@@ -67,9 +67,9 @@ A hit is a fragment, so read around it before you answer:
 - **Say what you searched:** the queries, the channels and the dates.
 - **Never claim completeness:** results are ranked and capped, new messages may be missing, and you see only what the user can see. Write "I found no messages that match …", not "there are none".
 
-## Writes ask first
+## Writes are allowed by default
 
-Sending, drafting, scheduling, reactions, canvases, lists, uploads and new conversations all make OpenCode ask the user.
+Sending, drafting, scheduling, reactions, canvases, lists, uploads and new conversations all run without a prompt unless the user set `access: "ask-changes"` or a rule that asks or denies. Show the user what you will write before you write it.
 
 - **Before a write:** show the user the channel (name and ID) and the exact text.
 - **Drafts:** use `slack_send_message_draft` when the user has not seen the final text yet.
@@ -91,7 +91,7 @@ opencode api post /api/rpc/slack.workspace.tools/slack_search_public \
 - **The result** is `{"output":{"output":…,"text":…}}`, with the same Markdown text as above.
 - **`describe`** (`-d '{"input":{}}'`) lists the methods.
 - **Errors:** `opencode api` exits with status 1 on an RPC error, after it prints the error JSON. Check the status before you use the output.
-- **Permissions:** the script runs under the session agent's rules, resolved before the tool runs: only an allow runs, and an ask is refused. So `slack_search_public_and_private`, `slack_read_file` and every write and send need an allow rule. A saved "Always allow" does not authorize a script.
+- **Permissions:** a script gets the same default as the model, so at `access: "all"` every tool runs. The script runs under the session agent's rules, resolved before the tool runs: only an allow runs, and an ask is refused. Under `"ask-changes"` or `"read-only"`, or with a later rule, the private search, file reads and writes need an allow rule. A saved "Always allow" does not authorize a script.
 - **Its own session, also for a test:** your chat session names no agent, so the RPC refuses it. Create a session for the script as above, and tell the user. Never borrow a session found in history or a session list: the script would run as that session's agent, under its rules.
 - **Details:** https://raw.githubusercontent.com/joe-broadhead/opencode-slack/HEAD/docs/scripting.md
 

@@ -23,6 +23,7 @@ function input(overrides: Partial<StatusInput> = {}): StatusInput {
     hostSupported: true,
     hostTested: true,
     parsed: OK,
+    access: "all",
     active: true,
     nameInUse: false,
     client: C1,
@@ -192,7 +193,7 @@ describe("buildStatus details", () => {
       client: { id: "C1", mode: "public_pkce", source: "options" },
       callback: "http://localhost:8765/callback",
       scopes: ["channels:history", "channels:read", "search:read.public", "users:read"],
-      asksBefore: ["searching private channels", "reading files", "writes: messages, drafts, schedules, reactions, canvases, lists, new conversations and file uploads", "Slack tools this plugin does not know yet"],
+      asksBefore: [],
       host: { version: "2.2.3", range: ">=2.2.3 <2.3.0", tested: true },
     })
   })
@@ -255,7 +256,7 @@ describe("buildStatus details", () => {
     }))
     expect(status.tools).toEqual({ read: 3, private: 1, file: 1, write: 2, unknown: 2, unknownNames: ["slack_alpha_new", "slack_zeta_new"] })
     expect(status.message).toBe("Connected. Slack tools available: 9.")
-    expect(formatStatus(status)).toContain("Tools: 3 read, 1 private search, 1 file, 2 write; 2 unknown (ask first): slack_alpha_new, slack_zeta_new")
+    expect(formatStatus(status)).toContain("Tools: 3 read, 1 private search, 1 file, 2 write; 2 unknown (new tools run too): slack_alpha_new, slack_zeta_new")
   })
 
   test("lists at most 20 unknown names, only plain ones, and counts them all", () => {
@@ -265,10 +266,10 @@ describe("buildStatus details", () => {
     const status = buildStatus(input({ tools: [...odd, ...plain].map(tool) }))
     expect(status.tools.unknown).toBe(29)
     expect(status.tools.unknownNames).toEqual(plain.slice(0, 20))
-    expect(formatStatus(status)).toContain(`; 29 unknown (ask first): ${plain.slice(0, 20).join(", ")} and 9 more`)
+    expect(formatStatus(status)).toContain(`; 29 unknown (new tools run too): ${plain.slice(0, 20).join(", ")} and 9 more`)
     for (const name of odd) expect(formatStatus(status)).not.toContain(name)
     const none = buildStatus(input({ tools: odd.map(tool) }))
-    expect(formatStatus(none)).toContain("0 write; 4 unknown (ask first)\n")
+    expect(formatStatus(none)).toContain("0 write; 4 unknown (new tools run too)\n")
   })
 })
 
@@ -285,7 +286,7 @@ describe("unguarded agents", () => {
   ]
 
   test("names agents that would run an unknown Slack tool without asking", () => {
-    expect(buildStatus(input({ agents })).unguardedAgents).toEqual(["custom", "loose", "reopened"])
+    expect(buildStatus(input({ agents })).unguardedAgents).toEqual(["custom"])
   })
 
   test("is empty when the plugin registered nothing", () => {
@@ -300,7 +301,7 @@ describe("unguarded agents", () => {
   test("the row lists the names only, then the plugin's block to paste, one rule per line", () => {
     const row = statusRows(buildStatus(input({ agents }))).find((item) => item.label === "Agents without default rules")
     const [names, ...block] = (row?.value ?? "").split("\n")
-    expect(names).toBe("custom, loose, reopened")
+    expect(names).toBe("custom")
     expect(JSON.parse(block.join("\n"))).toEqual(defaultRules())
     expect(block.slice(1, -1).every((line) => line.startsWith('  { "action": '))).toBe(true)
   })
@@ -368,7 +369,7 @@ describe("formatStatus", () => {
       "Slack",
       "Connection: sign-in required. AUTH_REQUIRED: Sign in to Slack to use it in OpenCode.",
       "Account: Slack shows the account on its sign-in page; OpenCode does not store it.",
-      'Access: Reads run without asking. Asks before searching private channels; reading files; writes: messages, drafts, schedules, reactions, canvases, lists, new conversations and file uploads; Slack tools this plugin does not know yet. To allow one, choose "Always allow" when asked, or add a permissions rule such as { "action": "slack_slack_read_file", "resource": "*", "effect": "allow" }.',
+      'Access: Every tool runs without asking: reads, the private-channel search, files, writes, sends and new Slack tools. Set the access option to "ask-changes" or "read-only" to restrict it, or add a later rule.',
       "Server: slack at https://mcp.slack.com/mcp",
       "Client: C1 (public, PKCE; set in plugin options)",
       "Callback: http://localhost:8765/callback (register exactly this URL in the app's Redirect URLs)",

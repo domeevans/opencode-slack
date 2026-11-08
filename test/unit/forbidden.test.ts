@@ -107,3 +107,31 @@ describe("forbidden APIs", () => {
     for (const rule of RULES) for (const path of Object.keys(rule.except ?? {})) expect({ rule: rule.name, path, exists: all.has(path) }).toEqual({ rule: rule.name, path, exists: true })
   })
 })
+
+// Shipped text states behaviour, not who decided it. These words name internal review, so they never reach a user.
+const INTERNAL = [
+  { name: "owner decision", pattern: /owner'?s? (decision|ruling)/i, example: "the owner's decision" },
+  { name: "the lead", pattern: /\bthe lead\b/i, example: "the lead ruled" },
+  { name: "a lane name", pattern: /\blane\b/i, example: "the slack lane" },
+  { name: "a tracker marker", pattern: /hey-jelly #/i, example: "hey-jelly #12" },
+]
+
+/** The text a user or the model reads: the README, the guides, the skills and the source comments. */
+function shipped(): string[] {
+  return ["src", "test", "skills", "docs"]
+    .flatMap((dir) => readdirSync(join(REPO, dir), { recursive: true, withFileTypes: true }))
+    .filter((entry) => entry.isFile() && /\.(md|ts|tsx|json)$/.test(entry.name) && !entry.name.endsWith(".json"))
+    .map((entry) => relative(REPO, join(entry.parentPath, entry.name)).split(sep).join("/"))
+    .concat(["README.md", "SECURITY.md", "CONTRIBUTING.md", "AGENTS.md", "CHANGELOG.md"])
+    .filter((path) => path !== SELF && !path.split("/").includes("node_modules"))
+    .sort()
+}
+
+describe("internal wording", () => {
+  test.each(INTERNAL.map((rule) => [rule.name, rule] as const))("%s: no shipped text uses it", (_name, rule) => {
+    expect(rule.pattern.test(rule.example)).toBe(true)
+    const hits = shipped().flatMap((path) => readFileSync(join(REPO, path), "utf8").split("\n")
+      .flatMap((line, index) => (rule.pattern.test(line) ? [`${path}:${index + 1}: ${line.trim()}`] : [])))
+    expect(hits).toEqual([])
+  })
+})

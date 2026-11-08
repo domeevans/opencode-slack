@@ -7,7 +7,7 @@ import { join, sep } from "node:path"
 import { defaultRules, type Rule } from "../../src/permissions.js"
 import type { Status } from "../../src/status.js"
 import { METHODS, TOOLS_RPC_ID } from "../../src/host/tools-rpc.js"
-import { classify, READ_TOOLS } from "../../src/tools.js"
+import { classify } from "../../src/tools.js"
 import { fakeInput, FAKE_TOOLS, UPSTREAM_FAILURE } from "./fake-slack-mcp.js"
 import { CLIENT_ID, HOSTED_OAUTH, REPO, repositoryChanges, SHADOWING_SKILL, TEMP, USER_SERVER, type Host, type Project } from "./harness.js"
 import type { Outcome } from "./probe/index.js"
@@ -22,7 +22,7 @@ const PACKAGE_VERSION = (JSON.parse(readFileSync(join(REPO, "package.json"), "ut
 // Agents defined only in the project's config; OpenCode creates them after package plugins run.
 const CONFIG_ONLY = ["custom", "locked", "fixed"]
 const isBaseAllow = (rule: Rule) => rule.action === "*" && rule.resource === "*" && rule.effect === "allow"
-const catchAlls = (permissions: readonly Rule[]) => permissions.filter((rule) => rule.action === "slack_*" && rule.effect === "ask").length
+const catchAlls = (permissions: readonly Rule[]) => permissions.filter((rule) => rule.action === "slack_*" && rule.effect === "allow").length
 
 export function hostSuite(name: string, start: () => Promise<Host>): void {
   describe(name, () => {
@@ -55,6 +55,31 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         if (posted?.type === "synthetic") return posted.payload.text
       }
       throw new Error("/slack-status posted nothing")
+    }
+
+    /**
+     * Runs `code` as Code Mode does, through a schedule's check program: OpenCode checks each tool's input and output
+     * and evaluates permissions with nobody present to answer a prompt. The program reports by throwing "SEEN <json>",
+     * so no schedule is ever created and no model is involved.
+     */
+    async function codeMode(project: Project, sessionID: string, code: string): Promise<{ seen: unknown } | { refused: string }> {
+      let message: string
+      try {
+        const schedule = await host.client.experimental.schedule.create({
+          sessionID, name: "slack-host-test", when: { in: "6 hours" }, prompt: "noop", if: { code }, ...at(project),
+        } as never)
+        await host.client.experimental.schedule.delete({ scheduleID: schedule.id, ...at(project) } as never)
+        throw new Error("the check program finished without reporting")
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error)
+      }
+      const seen = /SEEN (.*)$/s.exec(message)
+      if (!seen) return { refused: message }
+      try {
+        return { seen: JSON.parse(seen[1]!) }
+      } catch {
+        return { seen: seen[1]! }
+      }
     }
 
     // The host lists a server's tools shortly after it reports the server connected.
@@ -101,7 +126,7 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         const text = await slashStatus("defaults")
         expect(text).toStartWith("Slack\nConnection: connected. ")
         expect(text).toContain(`Client: ${CLIENT_ID} (public, PKCE; set in plugin options)`)
-        expect(text).toContain('Agents without default rules: custom\n[\n  { "action": "slack_*", "resource": "*", "effect": "ask" },')
+        expect(text).toContain('Agents without default rules: custom\n[\n  { "action": "slack_*", "resource": "*", "effect": "allow" },')
         expect(text).toContain(`OpenCode: ${host.version} (tested; supported range >=2.2.3 <2.3.0)`)
       })
 
@@ -122,10 +147,8 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         for (const id of CONFIG_ONLY) expect({ id, catchAlls: catchAlls(agents.find((agent) => agent.id === id)!.permissions) }).toEqual({ id, catchAlls: id === "fixed" ? 1 : 0 })
       })
 
-      test.each(FAKE_TOOLS.map((tool) => [tool, classify(tool)] as const))("V1: %s (%s)", async (tool, toolClass) => {
-        const outcome = await check("defaults", "build", tool)
-        expect(outcome.outcome).toBe(toolClass === "read" ? "allow" : "ask")
-        if (outcome.outcome === "ask") expect(outcome).toEqual({ outcome: "ask", asked: `slack_${tool}`, afterReply: "rejected" })
+      test.each(FAKE_TOOLS.map((tool) => [tool, classify(tool)] as const))("V1: %s (%s) runs without a prompt", async (tool) => {
+        expect(await check("defaults", "build", tool)).toEqual({ outcome: "allow" })
       })
 
       test.each(["explore", "locked"])("V4: %s, with a later deny-all, stays denied", async (agent) => {
@@ -146,8 +169,8 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         expect((await check("defaults", "custom", "slack_send_message")).outcome).toBe("allow")
         expect((await check("defaults", "custom", "slack_brand_new_tool")).outcome).toBe("allow")
         expect((await check("defaults", "fixed", "slack_search_public")).outcome).toBe("allow")
-        expect((await check("defaults", "fixed", "slack_send_message")).outcome).toBe("ask")
-        expect((await check("defaults", "fixed", "slack_brand_new_tool")).outcome).toBe("ask")
+        expect((await check("defaults", "fixed", "slack_send_message")).outcome).toBe("allow")
+        expect((await check("defaults", "fixed", "slack_brand_new_tool")).outcome).toBe("allow")
         expect((await check("defaults", "explore", "slack_search_public")).outcome).toBe("deny")
       })
     })
@@ -231,12 +254,10 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         expect(since(from)).toEqual([])
       })
 
-      test("a write is a method: refused before dispatch while it would ask, with no server call", async () => {
+      test("a write is a method, and runs on the default access with no allow rule", async () => {
         const from = host.toolCalls().length
-        const refused = await run("build", "slack_send_message", MESSAGE)
-        expect(refused).toMatchObject({ type: "failed", code: "PERMISSION_DENIED" })
-        expect(refused.message).toMatch(/would ask/)
-        expect(since(from)).toEqual([])
+        expect((await run("build", "slack_send_message", MESSAGE)).value).toMatchObject({ output: { tool: "slack_send_message" } })
+        expect(since(from)).toEqual(["slack_send_message"])
       })
 
       test("a write a session allows runs, and the fake server receives it", async () => {
@@ -247,18 +268,13 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         expect(since(from)).toEqual(["slack_send_message"])
       })
 
-      test("refuses the private search and the file read, which ask by default, at once and with no prompt left waiting", async () => {
+      test("the private search and the file read are methods too, and run on the default access", async () => {
         const from = host.toolCalls().length
-        for (const method of ["slack_search_public_and_private", "slack_read_file"]) {
-          const started = Date.now()
-          const result = await run("build", method, method === "slack_read_file" ? FILE : { query: "q" })
-          expect(result).toMatchObject({ type: "failed", code: "PERMISSION_DENIED" })
-          expect(result.message).toMatch(/would ask/)
-          expect(Date.now() - started).toBeLessThan(5000)
-        }
+        expect((await run("build", "slack_search_public_and_private", { query: "q" })).value).toMatchObject({ output: { tool: "slack_search_public_and_private" } })
+        expect((await run("build", "slack_read_file", FILE)).value).toMatchObject({ output: { tool: "slack_read_file" } })
         const { data: pending } = await host.client.permission.request.list(at("defaults"))
         expect(pending.filter((request) => JSON.stringify(request).includes(sessions.build!))).toEqual([])
-        expect(since(from)).toEqual([])
+        expect(since(from)).toEqual(["slack_search_public_and_private", "slack_read_file"])
       })
 
       test("applies the session's rules after the agent's: an allow rule opens the tools that ask", async () => {
@@ -274,7 +290,7 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
 
       test("describe with a session reports each method's permission; without one it omits it", async () => {
         const { value } = await script("describe", { sessionID: sessions.build })
-        const expected = Object.fromEntries(METHODS.map((method) => [method.name, READ_TOOLS.includes(method.name) ? "allow" : "ask"]))
+        const expected = Object.fromEntries(METHODS.map((method) => [method.name, "allow"]))
         expect(Object.fromEntries(value.methods.map((method: { name: string; permission: string }) => [method.name, method.permission]))).toEqual(expected)
         const plain = (await script("describe", {})).value
         expect(plain.methods.every((method: object) => !Object.hasOwn(method, "permission"))).toBe(true)
@@ -352,6 +368,70 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
       })
     })
 
+    // R2: the same proofs on the Code Mode path, inside the host's `execute`, where nobody can answer a prompt.
+    test("R2 Code Mode: a read runs; an ask and a deny are refused with nothing sent; an unknown name is refused", async () => {
+      await discovered("defaults")
+      const created = async (permissions?: Rule[]) =>
+        (await host.client.session.create({ title: "code mode", agent: "build", ...at("defaults"), ...(permissions ? { permissions } : {}) } as never)).id
+      const run = (sessionID: string, tool: string) =>
+        codeMode("defaults", sessionID, `const r = await tools.slack[${JSON.stringify(tool)}]({}); throw new Error("SEEN " + JSON.stringify(r))`)
+
+      const READ = "slack_read_user_profile"
+      const before = host.toolCalls().length
+      expect(await run(await created(), READ)).toHaveProperty("seen")
+      expect(host.toolCalls().slice(before)).toEqual([READ])
+
+      // An ask is refused before the tool runs: nothing reaches Slack and no prompt is left waiting.
+      const asking = host.toolCalls().length
+      const askSession = await created([{ action: "slack_slack_read_user_profile", resource: "*", effect: "ask" }])
+      const asked = await run(askSession, READ)
+      expect(asked).toHaveProperty("refused")
+      expect((asked as { refused: string }).refused).toMatch(/needs approval|nobody is present|not permitted|declined|ask/i)
+      expect(host.toolCalls().slice(asking)).toEqual([])
+      expect(await host.client.permission.list({ sessionID: askSession, ...at("defaults") })).toEqual([])
+
+      const denied = await run(await created([{ action: "slack_slack_read_user_profile", resource: "*", effect: "deny" }]), READ)
+      expect(denied).toHaveProperty("refused")
+      const unknown = await run(await created(), "no_such_tool")
+      expect(unknown).toHaveProperty("refused")
+      expect(host.toolCalls().slice(asking)).toEqual([])
+    })
+
+    // R18: one host test per value, on the tools RPC path, where a refusal must reach nothing.
+    describe("access", () => {
+      for (const [project, access, effect] of [
+        ["accessAll", "all", "allow"],
+        ["accessAsk", "ask-changes", "ask"],
+        ["accessReadOnly", "read-only", "deny"],
+      ] as const) {
+        test(`${access}: the block is the ${access} one, a read runs, and a write ${effect === "allow" ? "runs" : effect === "ask" ? "is refused with nothing sent" : "is denied"}`, async () => {
+          await discovered(project)
+          const contract = await host.client.session.create({ title: "access", agent: "build", ...at(project) })
+          const CHANNEL = { channel_id: "C0TEST" }
+          const MESSAGE = { channel_id: "C0TEST", text: "hello" }
+          const script = async (method: string, input: object = {}): Promise<{ value?: unknown; code?: string; message?: string }> => {
+            try {
+              return { value: await call(TOOLS_RPC_ID, method, project, { sessionID: contract.id, input }) }
+            } catch (error) {
+              const e = error as Record<string, any>
+              return { code: e.data?.code, message: String(e.message ?? e) }
+            }
+          }
+          const before = host.toolCalls().length
+          expect(await script("slack_read_channel", CHANNEL)).toHaveProperty("value")
+          const write = await script("slack_send_message", MESSAGE)
+          if (effect === "allow") expect(write).toHaveProperty("value")
+          else {
+            expect(write).toMatchObject({ code: "PERMISSION_DENIED" })
+            if (effect === "ask") expect(write.message).toMatch(/would ask/)
+            expect(host.toolCalls().slice(before)).toEqual(["slack_read_channel"])
+          }
+          if (effect === "allow") expect(host.toolCalls().slice(before)).toEqual(["slack_read_channel", "slack_send_message"])
+          expect(await host.client.permission.list({ sessionID: contract.id, ...at(project) })).toEqual([])
+        })
+      }
+    })
+
     describe("user permissions", () => {
       test.each(["build", "custom"])("V2: a user allow for slack_slack_send_message wins for %s", async (agent) => {
         expect((await check("rules", agent, "slack_send_message")).outcome).toBe("allow")
@@ -361,16 +441,16 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         expect((await check("rules", agent, "slack_search_public")).outcome).toBe("deny")
       })
 
-      test("other defaults still ask", async () => {
-        expect((await check("rules", "build", "slack_read_file")).outcome).toBe("ask")
-        expect((await check("rules", "build", "slack_brand_new_tool")).outcome).toBe("ask")
+      test("other defaults still run", async () => {
+        expect((await check("rules", "build", "slack_read_file")).outcome).toBe("allow")
+        expect((await check("rules", "build", "slack_brand_new_tool")).outcome).toBe("allow")
       })
 
       test("with the status fix, the user's own rules keep winning", async () => {
         expect((await check("rules", "fixed", "slack_send_message")).outcome).toBe("allow")
         expect((await check("rules", "fixed", "slack_search_public")).outcome).toBe("deny")
         expect((await check("rules", "fixed", "slack_read_thread")).outcome).toBe("allow")
-        expect((await check("rules", "fixed", "slack_read_file")).outcome).toBe("ask")
+        expect((await check("rules", "fixed", "slack_read_file")).outcome).toBe("allow")
       })
 
       test("a disabled server shows SERVER_DISABLED", async () => {
@@ -466,9 +546,10 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
     })
 
     // Saved approvals apply to the whole project, so this runs last and on a tool nothing else checks afterwards.
-    test("V3: replying always lets the next identical call through without asking", async () => {
-      expect(await check("defaults", "build", "slack_schedule_message", "always")).toEqual({ outcome: "ask", asked: "slack_slack_schedule_message", afterReply: "allowed" })
-      expect(await check("defaults", "build", "slack_schedule_message")).toEqual({ outcome: "allow" })
+    test("V3: under ask-changes, replying always lets the next identical call through without asking", async () => {
+      expect((await status("accessAsk")).state).toBe("connected")
+      expect(await check("accessAsk", "build", "slack_schedule_message", "always")).toEqual({ outcome: "ask", asked: "slack_slack_schedule_message", afterReply: "allowed" })
+      expect(await check("accessAsk", "build", "slack_schedule_message")).toEqual({ outcome: "allow" })
     })
 
     // OpenCode looks for `.opencode` folders above a project, up to its repository root. Under HOME or TMPDIR it could

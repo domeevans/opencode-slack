@@ -65,7 +65,7 @@ export default Plugin.define({
       })
       // Code Mode's catalog describes the server's namespace with this text.
       await ctx.tool.transform((editor) => editor.namespace({ name: SERVER, description: NAMESPACE_DESCRIPTION }))
-      await ctx.agent.transform((editor) => insertDefaultRules(editor))
+      await ctx.agent.transform((editor) => insertDefaultRules(editor, options.access))
       const skills = await loadSkills()
       bundled = skills
       await ctx.skill.transform((editor) => {
@@ -116,6 +116,7 @@ export default Plugin.define({
       hostSupported,
       hostTested,
       parsed,
+      access: options?.access ?? "all",
       active: options !== undefined,
       nameInUse,
       client,

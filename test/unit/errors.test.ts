@@ -43,6 +43,7 @@ describe("the status next steps", () => {
     hostSupported: true,
     hostTested: true,
     parsed: parseOptions({ oauth: { client_id: "C1" } }),
+    access: "all",
     active: true,
     nameInUse: false,
     client: { client: { id: "C1", source: "options" }, invalid: false },

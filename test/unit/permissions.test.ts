@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { defaultRules, insertDefaultRules, type Rule } from "../../src/permissions.js"
-import { READ_TOOLS } from "../../src/tools.js"
+import { KNOWN_TOOLS, READ_TOOLS } from "../../src/tools.js"
 import { agent, agentEditor, BASE_ALLOW, BASE_RULES } from "./fakes.js"
 
 const ask = (action: string): Rule => ({ action, resource: "*", effect: "ask" })
@@ -8,26 +8,34 @@ const allow = (action: string): Rule => ({ action, resource: "*", effect: "allow
 const deny = (action: string): Rule => ({ action, resource: "*", effect: "deny" })
 
 describe("defaultRules", () => {
-  test("asks before every tool on the server, then allows each known read", () => {
+  const OTHER = Object.keys(KNOWN_TOOLS).filter((tool) => KNOWN_TOOLS[tool] !== "read")
+
+  test("at the default access, allows every tool on the server and any it adds later", () => {
     expect(defaultRules()).toEqual([
-      ask("slack_*"),
-      allow("slack_slack_search_public"),
-      allow("slack_slack_search_channels"),
-      allow("slack_slack_search_users"),
-      allow("slack_slack_read_channel"),
-      allow("slack_slack_read_thread"),
-      allow("slack_slack_read_user_profile"),
-      allow("slack_slack_read_canvas"),
-      allow("slack_slack_list_channel_members"),
-      allow("slack_slack_get_reactions"),
-      allow("slack_slack_list_user_channels"),
-      allow("slack_slack_read_list"),
-      allow("slack_slack_search_emojis"),
+      allow("slack_*"),
+      ...READ_TOOLS.map((tool) => allow(`slack_${tool}`)),
+      ...OTHER.map((tool) => allow(`slack_${tool}`)),
     ])
+    expect(defaultRules().every((rule) => rule.effect === "allow")).toBe(true)
   })
 
-  test("allows exactly the read tools", () => {
-    expect(defaultRules().slice(1)).toEqual(READ_TOOLS.map((tool) => allow(`slack_${tool}`)))
+  test("at ask-changes, allows each read and asks for the rest, the namespace included", () => {
+    const rules = defaultRules("ask-changes")
+    expect(rules[0]).toEqual(ask("slack_*"))
+    expect(rules.slice(1, 1 + READ_TOOLS.length)).toEqual(READ_TOOLS.map((tool) => allow(`slack_${tool}`)))
+    expect(rules.slice(1 + READ_TOOLS.length)).toEqual(OTHER.map((tool) => ask(`slack_${tool}`)))
+  })
+
+  test("at read-only, allows each read and denies the rest, the namespace included", () => {
+    const rules = defaultRules("read-only")
+    expect(rules[0]).toEqual(deny("slack_*"))
+    expect(rules.slice(1, 1 + READ_TOOLS.length)).toEqual(READ_TOOLS.map((tool) => allow(`slack_${tool}`)))
+    expect(rules.slice(1 + READ_TOOLS.length)).toEqual(OTHER.map((tool) => deny(`slack_${tool}`)))
+  })
+
+  test("names every known tool exactly once, after its namespace rule", () => {
+    const named = defaultRules("all").slice(1).map((rule) => rule.action)
+    expect(named.sort()).toEqual(Object.keys(KNOWN_TOOLS).map((tool) => `slack_${tool}`).sort())
   })
 })
 

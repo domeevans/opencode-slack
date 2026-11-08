@@ -6,8 +6,10 @@ import { join, relative } from "node:path"
 import { fileURLToPath } from "node:url"
 import { parameters, SLACK_SCHEMAS } from "../host/slack-catalog.js"
 import { parseOptions } from "../../src/options.js"
-import { buildStatus } from "../../src/status.js"
+import { buildStatus, statusRows } from "../../src/status.js"
 import { classify, NAMESPACE_DESCRIPTION } from "../../src/tools.js"
+import { TESTED_HOSTS } from "../../src/defaults.js"
+import { defaultRules } from "../../src/permissions.js"
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url))
 const markdown = (dir: string): string[] =>
@@ -81,8 +83,10 @@ describe("the skill and the docs", () => {
   })
 
   test("name a parameter in a `name: value` example only when some Slack tool has it", () => {
+    // The plugin's own options are not tool parameters: `access: "read-only"` is an option example.
+    const OPTIONS = new Set(["access", "allowUntestedHost"])
     const wrong = ["skills/slack-search/SKILL.md", "README.md"].flatMap((file) => [...read(file).matchAll(/`([a-z_]+): [^`]+`/g)].map((match) => ({ file, parameter: match[1]! })))
-      .filter((use) => !ALL_PARAMETERS.has(use.parameter))
+      .filter((use) => !OPTIONS.has(use.parameter) && !ALL_PARAMETERS.has(use.parameter))
     expect(wrong).toEqual([])
   })
 
@@ -119,20 +123,28 @@ describe("tool names and files the text names", () => {
   })
 })
 
-describe("what asks first", () => {
-  // Every class that asks by default, and how each text that lists them names it.
-  const NAMES: Record<string, RegExp> = { private: /private (search|channels)/i, file: /(file reads|reading files)/i, write: /writes/i }
+describe("what the access option restricts", () => {
+  // The three classes a restricted access affects, and how each text names them.
+  const NAMES: Record<string, RegExp> = { private: /private(-channel)? (search|channels)/i, file: /(file reads?|reading files)/i, write: /writes?\b|write and send/i }
 
-  // The Jelly summary says what the plugin reaches, not what asks: Jelly's card shows each tool's effect.
-  test("status and the Code Mode namespace each name every class that asks", () => {
-    const asking: string[] = [...new Set(Object.keys(SLACK_SCHEMAS).map(classify))].filter((toolClass) => toolClass !== "read").sort()
-    const { asksBefore } = buildStatus({
-      version: "9.9.9", hostVersion: "2.2.3", hostSupported: true, hostTested: true, parsed: parseOptions({}), active: true, nameInUse: false,
-      client: { invalid: false }, servers: [], tools: [], agents: [], shadowedSkills: [],
-    })
-    expect(asking).toEqual(Object.keys(NAMES).sort())
-    for (const [where, text] of [["status", asksBefore.join("; ")], ["namespace", NAMESPACE_DESCRIPTION]] as const)
-      for (const toolClass of asking) expect({ where, toolClass, named: NAMES[toolClass]!.test(text) }).toEqual({ where, toolClass, named: true })
+  test("status names every class it restricts, for each restricted value, and nothing at the default", () => {
+    const rows = (access: "all" | "ask-changes" | "read-only") => {
+      const status = buildStatus({
+        version: "9.9.9", hostVersion: "2.2.3", hostSupported: true, hostTested: true, parsed: parseOptions({}), access, active: true,
+        nameInUse: false, client: { invalid: false }, servers: [], tools: [], agents: [], shadowedSkills: [],
+      })
+      return { status, text: statusRows(status).find((row) => row.label === "Access")!.value }
+    }
+    expect(rows("all").status.asksBefore).toEqual([])
+    for (const access of ["ask-changes", "read-only"] as const) {
+      expect(rows(access).status.asksBefore.length).toBeGreaterThan(0)
+      for (const [toolClass, pattern] of Object.entries(NAMES)) expect({ access, toolClass, named: pattern.test(rows(access).text) }).toEqual({ access, toolClass, named: true })
+    }
+  })
+
+  test("the Code Mode namespace says every tool is allowed, and that access restricts it", () => {
+    expect(NAMESPACE_DESCRIPTION).toContain("Every tool is allowed by default")
+    expect(NAMESPACE_DESCRIPTION).toContain("access restricts")
   })
 })
 
@@ -144,5 +156,53 @@ describe("the catalog the fake Slack server serves", () => {
     for (const name of names) expect({ name, type: SLACK_SCHEMAS[name]!.type }).toEqual({ name, type: "object" })
     const jelly = JSON.parse(read("package.json")) as { jelly: { tools: { name: string }[] } }
     expect(jelly.jelly.tools.map((tool) => tool.name.replace(/^slack\./, "")).sort()).toEqual([...names].sort())
+  })
+})
+
+// The block an administrator copies into managed config: the README prints it in full, and the configuration guide
+// prints it for every access value, generated from defaultRules().
+describe("the default rules block", () => {
+  test("the README's Permissions section prints defaultRules() in full", () => {
+    const section = /## Permissions([\s\S]*?)## Configure/.exec(read("README.md"))?.[1] ?? ""
+    const printed = /generated from[\s\S]*?```json\n([\s\S]*?)\n\s*```/.exec(section)?.[1] ?? "[]"
+    expect(JSON.parse(printed)).toEqual(defaultRules())
+  })
+
+  test("the configuration guide prints the block for every access value", () => {
+    const raw = read("docs/configuration.md")
+    for (const access of ["all", "ask-changes", "read-only"] as const) {
+      const block = new RegExp(`\`access: "${access}"\`[\\s\\S]*?\n\n\`\`\`json\n([\\s\\S]*?)\n\`\`\``).exec(raw)?.[1] ?? "[]"
+      expect({ access, block: JSON.parse(block) }).toEqual({ access, block: defaultRules(access) })
+    }
+  })
+})
+
+// Every "tested on …" mention states TESTED_HOSTS, so a release added to the list cannot leave a stale sentence behind.
+describe("tested hosts", () => {
+  const UNRELEASED = /## \[Unreleased\]([\s\S]*?)(?=\n## |$)/.exec(read("CHANGELOG.md"))?.[1] ?? ""
+  const SOURCES: [string, string][] = [
+    ["README.md", read("README.md")],
+    ["AGENTS.md", read("AGENTS.md")],
+    ["SECURITY.md", read("SECURITY.md")],
+    ["docs/configuration.md", read("docs/configuration.md")],
+    ["CHANGELOG.md (Unreleased)", UNRELEASED],
+  ]
+
+  test.each(SOURCES)("%s names exactly TESTED_HOSTS wherever it says what is tested", (file, text) => {
+    const mentions = text
+      .split("\n")
+      .flatMap((line) => line.split(/\.\s+/))
+      .filter((sentence) => /\btested\b/i.test(sentence))
+      // The supported range is not a tested release: drop a backticked `>=a.b.c <d.e.f` span before reading versions.
+      .map((sentence) => sentence.replace(/`[^`]*>=[^`]*`/g, ""))
+      .map((sentence) => [...sentence.matchAll(/\b\d+\.\d+\.\d+\b/g)].map((version) => version[0]!))
+      .filter((versions) => versions.length > 0)
+    for (const versions of mentions) expect({ file, versions: [...new Set(versions)].sort() }).toEqual({ file, versions: [...TESTED_HOSTS].sort() })
+  })
+
+  test("the untested example is 2.2.99, and no doc names a future release as tested", () => {
+    const all = SOURCES.map(([, text]) => text).join("\n")
+    expect(all).toContain("2.2.99")
+    expect(all).not.toMatch(/\b2\.2\.(?:7|8|9[0-8])\b(?!\d)/)
   })
 })

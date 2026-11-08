@@ -21,6 +21,7 @@ describe("parseOptions defaults", () => {
         redirectUri: "http://localhost:8765/callback",
         scopes: ["channels:history", "channels:read", "search:read.public", "users:read"],
         allowUntestedHost: false,
+        access: "all",
       },
     })
   })
@@ -28,7 +29,7 @@ describe("parseOptions defaults", () => {
   test.each([undefined, null, {}, { oauth: {} }])("%p without a client ID is valid and leaves the client to /connect", (input) => {
     expect(parseOptions(input)).toEqual({
       ok: true,
-      options: { redirectUri: DEFAULT_REDIRECT_URI, scopes: [...DEFAULT_SCOPES], allowUntestedHost: false },
+      options: { redirectUri: DEFAULT_REDIRECT_URI, scopes: [...DEFAULT_SCOPES], allowUntestedHost: false, access: "all" },
     })
   })
 
@@ -45,6 +46,7 @@ describe("parseOptions defaults", () => {
         scopes: ["search:read.public"],
         clientSecret: "s",
           allowUntestedHost: true,
+        access: "all",
       },
     })
   })
@@ -58,6 +60,7 @@ describe("parseOptions defaults", () => {
         callbackPort: 49200,
         scopes: [...DEFAULT_SCOPES],
         allowUntestedHost: false,
+        access: "all",
       },
     })
   })
@@ -97,7 +100,7 @@ describe("parseOptions rejects", () => {
 
   test("unknown top-level keys, naming the supported ones", () => {
     expect(rejected({ ...withOAuth({}), policy: { allow: ["write"] } })).toEqual({
-      code: "OPTIONS_INVALID", field: "policy", message: "This option is not supported.", next: "Remove it. Supported options: oauth, allowUntestedHost.",
+      code: "OPTIONS_INVALID", field: "policy", message: "This option is not supported.", next: "Remove it. Supported options: oauth, allowUntestedHost, access.",
     })
   })
 
@@ -230,7 +233,7 @@ describe("parseOptions rejects", () => {
 
   test("server is not an option: the server is always named slack", () => {
     expect(rejected(withOAuth({}, { server: "work" }))).toEqual({
-      code: "OPTIONS_INVALID", field: "server", message: "This option is not supported.", next: "Remove it. Supported options: oauth, allowUntestedHost.",
+      code: "OPTIONS_INVALID", field: "server", message: "This option is not supported.", next: "Remove it. Supported options: oauth, allowUntestedHost, access.",
     })
   })
 

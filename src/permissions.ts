@@ -1,6 +1,7 @@
 import type { Plugin } from "@opencode/plugin"
+import type { Access } from "./options.js"
 import { SERVER } from "./defaults.js"
-import { READ_TOOLS } from "./tools.js"
+import { KNOWN_TOOLS } from "./tools.js"
 
 type AgentEditor = Parameters<Parameters<Plugin.Context["agent"]["transform"]>[0]>[0]
 
@@ -10,39 +11,84 @@ export interface Rule {
   readonly effect: "allow" | "ask" | "deny"
 }
 
-/** Ask before every tool on the server, then allow the known reads. Later rules win. */
-export function defaultRules(): Rule[] {
+/** The tools that only read: they run at every `access` value. */
+export const READ_LIKE: readonly string[] = Object.keys(KNOWN_TOOLS).filter((tool) => KNOWN_TOOLS[tool] === "read")
+/** The tools that read private channels or files, and the writes: they ask or are denied once access is restricted. */
+const OTHER_TOOLS: readonly string[] = Object.keys(KNOWN_TOOLS).filter((tool) => KNOWN_TOOLS[tool] !== "read")
+
+const rule = (action: string, effect: Rule["effect"]): Rule => ({ action, resource: "*", effect })
+
+/**
+ * The block the plugin inserts. Broad first, narrow last, because the last matching rule wins.
+ *
+ * At the default `access: "all"` every Slack tool is allowed, and so is one Slack adds later, through the `slack_*`
+ * namespace. `"ask-changes"` keeps the reads and asks for the rest; `"read-only"` keeps the reads and denies the rest.
+ * The private-channel search, the file read and every write are the rest: they are not reads.
+ */
+export function defaultRules(access: Access = "all"): Rule[] {
+  const other: Rule["effect"] = access === "all" ? "allow" : access === "ask-changes" ? "ask" : "deny"
   return [
-    { action: `${SERVER}_*`, resource: "*", effect: "ask" },
-    ...READ_TOOLS.map((tool): Rule => ({ action: `${SERVER}_${tool}`, resource: "*", effect: "allow" })),
+    rule(`${SERVER}_*`, other),
+    ...READ_LIKE.map((tool) => rule(`${SERVER}_${tool}`, "allow")),
+    ...OTHER_TOOLS.map((tool) => rule(`${SERVER}_${tool}`, other)),
   ]
 }
 
-const same = (a: Rule, b: Rule) => a.action === b.action && a.resource === b.resource && a.effect === b.effect
+const same = (a: Rule | undefined, b: Rule) => a?.action === b.action && a.resource === b.resource && a.effect === b.effect
 const BASE_ALLOW: Rule = { action: "*", resource: "*", effect: "allow" }
 
 /**
- * Puts the default rules directly after each agent's first base `* * allow` rule. Everything evaluated later
- * still wins: the agent's own rules, the user's `permissions`, and saved "Always allow" approvals. Agents
- * without a base allow keep their stricter policy. Replaying the transform leaves agents unchanged, also when
- * another plugin has since inserted its own block between the base allow and this one.
- *
- * Verified on OpenCode 2.2.3. Agents created after plugins run, such as agents defined only in user config,
- * get no rules; status names them as unguarded and shows these rules for each agent's own permissions.
+ * True when the whole default block appears, in order, anywhere after the agent's first base allow: inserted by the
+ * plugin or copied by the user. Other plugins insert their blocks at the same index, so it need not follow directly.
  */
-export function insertDefaultRules(editor: AgentEditor): void {
-  const block = defaultRules()
+export function hasDefaultRules(permissions: readonly Rule[], access: Access = "all"): boolean {
+  const base = permissions.findIndex((item) => same(item, BASE_ALLOW))
+  if (base === -1) return false
+  const block = defaultRules(access)
+  return permissions.some((_, start) => start > base && block.every((item, offset) => same(permissions[start + offset], item)))
+}
+
+/**
+ * Puts the default rules directly after each agent's first base `* * allow` rule. Everything evaluated later still
+ * wins: the agent's own rules, the user's `permissions`, and saved "Always allow" approvals. Agents without a base
+ * allow keep their stricter policy. Replaying the transform leaves agents unchanged, also when another plugin has
+ * since inserted its own block between the base allow and this one.
+ *
+ * Verified on OpenCode 2.2.3. Agents created after plugins run, such as agents defined only in user config, get no
+ * rules; status names them as unguarded and shows these rules for each agent's own permissions.
+ */
+export function insertDefaultRules(editor: AgentEditor, access: Access = "all"): void {
+  const block = defaultRules(access)
   for (const agent of editor.list()) {
-    const at = agent.permissions.findIndex((rule) => same(rule, BASE_ALLOW))
+    if (hasDefaultRules(agent.permissions, access)) continue
+    const at = agent.permissions.findIndex((item) => same(item, BASE_ALLOW))
     if (at === -1) continue
-    // Other plugins insert their own blocks at the same place, so the block may sit anywhere after the base allow.
-    const present = agent.permissions.some((_rule, start) => start > at && block.every((rule, offset) => {
-      const existing = agent.permissions[start + offset]
-      return existing !== undefined && same(existing, rule)
-    }))
-    if (present) continue
     editor.update(agent.id, (draft) => {
-      draft.permissions.splice(at + 1, 0, ...block)
+      draft.permissions.splice(at + 1, 0, ...block.map((item) => ({ ...item })))
     })
   }
 }
+
+const wildcard = (pattern: string) =>
+  new RegExp(`^${pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")}$`)
+
+/** The host's evaluation for an MCP call (resource `*`): the last matching rule wins, and no match asks. */
+export function evaluate(permissions: readonly Rule[], action: string): Rule["effect"] {
+  return permissions.findLast((item) => wildcard(item.action).test(action) && wildcard(item.resource).test("*"))?.effect ?? "ask"
+}
+
+/** An action no Slack tool can have: OpenCode limits tool names to letters, digits, `_` and `-`. */
+const UNKNOWN_ACTION = `${SERVER}_.`
+
+/**
+ * Agents that need the per-agent fix: they have a base allow but not the block (for example agents defined only in
+ * the user's config, which OpenCode creates after plugins run), and their own rules would let a Slack tool this
+ * plugin does not know run without asking. An agent whose rules already ask or deny for every Slack tool is not listed.
+ */
+export const unguardedAgents = (
+  agents: readonly { readonly id: string; readonly permissions: readonly Rule[] }[],
+  access: Access = "all",
+) =>
+  agents
+    .filter((agent) => agent.permissions.some((item) => same(item, BASE_ALLOW)) && !hasDefaultRules(agent.permissions, access) && evaluate(agent.permissions, UNKNOWN_ACTION) === "allow")
+    .map((agent) => agent.id)

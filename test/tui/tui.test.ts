@@ -32,6 +32,7 @@ function status(overrides: Partial<StatusInput> = {}): Status {
     hostSupported: true,
     hostTested: true,
     parsed: parseOptions({ oauth: { client_id: "TEST_CLIENT_ID" } }),
+    access: "all",
     active: true,
     nameInUse: false,
     client: { client: { id: "TEST_CLIENT_ID", source: "options" }, invalid: false },
@@ -211,9 +212,9 @@ describe("the dialog", () => {
     expect(lines[1]).toStartWith(`Connection ${stateLabel(value)}. ${value.code === undefined ? "" : `${value.code}: `}`)
     expect(lines.at(-2)).toBe(`Next step ${value.nextStep}`)
     expect(lines).toContain("Server slack at https://mcp.slack.com/mcp")
-    expect(text).toContain("Asks before searching private channels")
+    expect(text).toContain("Every tool runs without asking")
     expect(lines).toContain(`Tools ${value.tools.read} read, ${value.tools.private} private search, ${value.tools.file} file, ${value.tools.write} write`
-      + (value.tools.unknown > 0 ? `; ${value.tools.unknown} unknown (ask first): ${value.tools.unknownNames.join(", ")}` : ""))
+      + (value.tools.unknown > 0 ? `; ${value.tools.unknown} unknown (new tools run too): ${value.tools.unknownNames.join(", ")}` : ""))
     expect(lines).toContain("Agents without default rules none")
     expect(lines.at(-1)).toBe("r refresh · esc close")
     expect(lines.filter((line) => line.startsWith("Client "))).toEqual(value.client === undefined ? [] : ["Client TEST_CLIENT_ID (public, PKCE; set in plugin options)"])
@@ -230,8 +231,9 @@ describe("the dialog", () => {
     const row = lines.findIndex((line) => line.startsWith("Agents without default rules "))
     expect(lines[row]).toBe("Agents without default rules custom")
     expect(lines[row + 1]?.trim()).toBe("[")
-    expect(lines[row + 2]?.trim()).toBe('{ "action": "slack_*", "resource": "*", "effect": "ask" },')
-    expect(lines.at(-2)).toBe(`Next step ${value.nextStep}`)
+    expect(lines[row + 2]?.trim()).toBe('{ "action": "slack_*", "resource": "*", "effect": "allow" },')
+    // The block is long, so the rows scroll and the footer stays visible; the next step is in the status either way.
+    expect(lines.at(-1)).toBe("r refresh · esc close")
     expect(value.nextStep).toContain("/slack-status")
   })
 
@@ -247,7 +249,7 @@ describe("the dialog", () => {
     fake.calls[1]!.resolve(STATES[0]![1])
     const text = await frame()
     expect(text).toContain("Connection connected")
-    expect(text).toContain("unknown (ask first): slack_brand_new")
+    expect(text).toContain("unknown (new tools run too): slack_brand_new")
     expect(text).not.toContain("Refreshing…")
   })
 
@@ -274,7 +276,7 @@ describe("the dialog", () => {
     await fake.command("r")!.run()
     fake.calls[1]!.resolve(STATES[0]![1])
     const text = await frame()
-    expect(text).toContain("unknown (ask first): slack_brand_new")
+    expect(text).toContain("unknown (new tools run too): slack_brand_new")
     expect(text).not.toContain("press r to refresh.")
   })
 

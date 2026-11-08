@@ -173,91 +173,91 @@
       {
         "name": "slack.slack_search_public_and_private",
         "permission": "slack_slack_search_public_and_private",
-        "effect": "ask",
+        "effect": "allow",
         "readOnly": true
       },
       {
         "name": "slack.slack_read_file",
         "permission": "slack_slack_read_file",
-        "effect": "ask",
+        "effect": "allow",
         "readOnly": true
       },
       {
         "name": "slack.slack_send_message",
         "permission": "slack_slack_send_message",
-        "effect": "ask",
+        "effect": "allow",
         "readOnly": false
       },
       {
         "name": "slack.slack_send_message_draft",
         "permission": "slack_slack_send_message_draft",
-        "effect": "ask",
+        "effect": "allow",
         "readOnly": false
       },
       {
         "name": "slack.slack_schedule_message",
         "permission": "slack_slack_schedule_message",
-        "effect": "ask",
+        "effect": "allow",
         "readOnly": false
       },
       {
         "name": "slack.slack_create_canvas",
         "permission": "slack_slack_create_canvas",
-        "effect": "ask",
+        "effect": "allow",
         "readOnly": false
       },
       {
         "name": "slack.slack_update_canvas",
         "permission": "slack_slack_update_canvas",
-        "effect": "ask",
+        "effect": "allow",
         "readOnly": false
       },
       {
         "name": "slack.slack_add_reaction",
         "permission": "slack_slack_add_reaction",
-        "effect": "ask",
+        "effect": "allow",
         "readOnly": false
       },
       {
         "name": "slack.slack_get_file_upload_url",
         "permission": "slack_slack_get_file_upload_url",
-        "effect": "ask",
+        "effect": "allow",
         "readOnly": false
       },
       {
         "name": "slack.slack_complete_file_upload",
         "permission": "slack_slack_complete_file_upload",
-        "effect": "ask",
+        "effect": "allow",
         "readOnly": false
       },
       {
         "name": "slack.slack_create_conversation",
         "permission": "slack_slack_create_conversation",
-        "effect": "ask",
+        "effect": "allow",
         "readOnly": false
       },
       {
         "name": "slack.slack_create_list",
         "permission": "slack_slack_create_list",
-        "effect": "ask",
+        "effect": "allow",
         "readOnly": false
       },
       {
         "name": "slack.slack_update_list",
         "permission": "slack_slack_update_list",
-        "effect": "ask",
+        "effect": "allow",
         "readOnly": false
       },
       {
         "name": "slack.slack_add_list_record",
         "permission": "slack_slack_add_list_record",
-        "effect": "ask",
+        "effect": "allow",
         "readOnly": false
       },
       {
         "name": "slack.slack_update_list_record",
         "permission": "slack_slack_update_list_record",
-        "effect": "ask",
+        "effect": "allow",
         "readOnly": false
       }
     ],

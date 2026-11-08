@@ -2,7 +2,8 @@ import type { PluginCode } from "./codes.js"
 import { APP_NAME, SERVER_DISPLAY_NAME, type ClientState } from "./connect.js"
 import { APP_MANIFEST_URL, SERVER, SLACK_MCP_URL, SUPPORTED_HOST_RANGE } from "./defaults.js"
 import type { ParsedOptions } from "./options.js"
-import { defaultRules, type Rule } from "./permissions.js"
+import type { Access } from "./options.js"
+import { defaultRules, unguardedAgents as unguardedOf, type Rule } from "./permissions.js"
 import type { ListedSkill } from "./skills.js"
 import { classify } from "./tools.js"
 
@@ -23,6 +24,8 @@ export interface Status {
   readonly version: string
   readonly state: State
   readonly code?: PluginCode
+  /** What the default rules allow: the `access` option, `all` when the plugin options were not read. */
+  readonly access: Access
   readonly message: string
   /** The host's reason for a failed connection: one line, at most 160 characters, URLs without their query. */
   readonly detail?: string
@@ -65,6 +68,8 @@ export interface StatusInput {
   /** One of the tested releases. */
   readonly hostTested: boolean
   readonly parsed: ParsedOptions
+  /** What the default rules allow: the `access` option. */
+  readonly access: Access
   /** False when the host check or the options stopped the plugin from registering anything. */
   readonly active: boolean
   readonly nameInUse: boolean
@@ -78,26 +83,32 @@ export interface StatusInput {
 /** What `/slack-status` and the RPC error say when the host cannot answer. */
 export const UNAVAILABLE = "STATUS_UNAVAILABLE: Slack status is unavailable. Next step: Run /slack-status again in a moment."
 
-const ASKS_BEFORE = [
-  "searching private channels",
-  "reading files",
-  "writes: messages, drafts, schedules, reactions, canvases, lists, new conversations and file uploads",
-  "Slack tools this plugin does not know yet",
-] as const
-
-/** Mirrors OpenCode's permission wildcard: `*` matches any text and `?` one character. */
-function matches(value: string, pattern: string): boolean {
-  const source = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")
-  return new RegExp(`^${source}$`, "s").test(value)
+/** What asks before it runs, per `access` value. At `all` nothing does; at `read-only` nothing asks, it is denied. */
+const asksBeforeOf = (access: Access): readonly string[] => {
+  if (access === "all") return []
+  const asking = [
+    "searching private channels and reading files",
+    "writes: messages, drafts, schedules, reactions, canvases, lists, new conversations and file uploads",
+    "Slack tools this plugin does not know yet",
+  ]
+  return asking
 }
 
-/** Last matching rule wins, and no match asks, as in OpenCode. MCP tools assert the resource `*`. */
-function effect(rules: readonly Rule[], action: string): Rule["effect"] {
-  return rules.findLast((rule) => matches(action, rule.action) && matches("*", rule.resource))?.effect ?? "ask"
+/** The permission posture, one sentence per `access` value, from the tool classes. */
+function accessText(status: Status): string {
+  const rule = quote({ action: `${status.server.name}_slack_read_file`, resource: "*", effect: "allow" })
+  switch (status.access) {
+    case "all":
+      return "Every tool runs without asking: reads, the private-channel search, files, writes, sends and new Slack tools. "
+        + 'Set the access option to "ask-changes" or "read-only" to restrict it, or add a later rule.'
+    case "read-only":
+      return "Reads run without asking; the private-channel search, the file read, every write and send, and new Slack tools are denied. "
+        + `To allow one, add a later rule such as ${rule}.`
+    case "ask-changes":
+      return "Reads run without asking. The private-channel search, the file read, every write and send, and new Slack tools ask first; "
+        + `choose "Always allow" when asked, or add a permissions rule such as ${rule}.`
+  }
 }
-
-/** An action no Slack tool can have: OpenCode limits tool names to letters, digits, `_` and `-`. */
-const UNKNOWN_ACTION = `${SERVER}_.`
 
 const NOTHING_TO_DO = "Nothing to do."
 const LISTED_UNKNOWN = 20
@@ -127,7 +138,7 @@ const quote = (rule: Rule) => `{ "action": "${rule.action}", "resource": "${rule
 const AGENT_FIX = "Put the default rules shown by /slack-status first in each listed agent's own permissions, in opencode.json or the agent's Markdown file, followed by your top-level rules for Slack tools."
 
 /** The block to paste, as a JSON list with one rule per line. */
-const REMEDY = `[\n${defaultRules().map((rule) => `  ${quote(rule)}`).join(",\n")}\n]`
+const remedy = (access: Access) => `[\n${defaultRules(access).map((rule) => `  ${quote(rule)}`).join(",\n")}\n]`
 
 /** The next step once connected: unguarded agents first, because they run Slack writes without asking. */
 function connectedNextStep(unguarded: readonly string[], shadowed: readonly ListedSkill[]): string {
@@ -180,9 +191,7 @@ export function buildStatus(input: StatusInput): Status {
     unknown: unknown.length,
     unknownNames: unknown.filter((name) => SAFE_NAME.test(name)).slice(0, LISTED_UNKNOWN),
   }
-  const unguardedAgents = input.active
-    ? input.agents.filter((agent) => effect(agent.permissions, UNKNOWN_ACTION) === "allow").map((agent) => agent.id)
-    : []
+  const unguardedAgents = input.active ? unguardedOf(input.agents, input.access) : []
   const client = input.client.client
   const base = {
     version: input.version,
@@ -195,7 +204,8 @@ export function buildStatus(input: StatusInput): Status {
       ...(options.callbackPort === undefined ? {} : { callbackPort: options.callbackPort }),
       scopes: options.scopes,
     }),
-    asksBefore: ASKS_BEFORE,
+    access: input.access,
+    asksBefore: asksBeforeOf(input.access),
     tools,
     unguardedAgents,
     host,
@@ -246,12 +256,13 @@ function callbackRow(callback: string, port: number | undefined): string {
   return `${callback} (${register}, and forward it to http://127.0.0.1:${port}${new URL(callback).pathname}, where OpenCode listens)`
 }
 
-/** The unknown tools: their count, and the names status may show. */
-function unknownTools(tools: Status["tools"]): string {
+/** The unknown tools: their count, their names, and what the current access does with one. */
+function unknownTools(tools: Status["tools"], access: Access): string {
   if (tools.unknown === 0) return ""
+  const posture = access === "all" ? "new tools run too" : access === "read-only" ? "new tools are denied" : "ask first"
   const more = tools.unknown - tools.unknownNames.length
-  if (tools.unknownNames.length === 0) return `; ${tools.unknown} unknown (ask first)`
-  return `; ${tools.unknown} unknown (ask first): ${tools.unknownNames.join(", ")}${more > 0 ? ` and ${more} more` : ""}`
+  if (tools.unknownNames.length === 0) return `; ${tools.unknown} unknown (${posture})`
+  return `; ${tools.unknown} unknown (${posture}): ${tools.unknownNames.join(", ")}${more > 0 ? ` and ${more} more` : ""}`
 }
 
 const CLIENT_SOURCE = { options: "set in plugin options", connect: "saved in /connect" } as const
@@ -278,11 +289,7 @@ export function statusRows(status: Status): { readonly label: string; readonly v
       value: `${stateLabel(status)}. ${status.code === undefined ? "" : `${status.code}: `}${status.message}${status.detail === undefined ? "" : ` ${status.detail}`}`,
     },
     { label: "Account", value: "Slack shows the account on its sign-in page; OpenCode does not store it." },
-    {
-      label: "Access",
-      value: `Reads run without asking. Asks before ${status.asksBefore.join("; ")}. To allow one, choose "Always allow" when asked, `
-        + `or add a permissions rule such as ${quote({ action: `${status.server.name}_slack_read_file`, resource: "*", effect: "allow" })}.`,
-    },
+    { label: "Access", value: accessText(status) },
     { label: "Server", value: `${status.server.name} at ${status.server.url}` },
   ]
   if (status.client !== undefined) {
@@ -299,11 +306,11 @@ export function statusRows(status: Status): { readonly label: string; readonly v
   }
   rows.push({
     label: "Tools",
-    value: `${tools.read} read, ${tools.private} private search, ${tools.file} file, ${tools.write} write${unknownTools(tools)}`,
+    value: `${tools.read} read, ${tools.private} private search, ${tools.file} file, ${tools.write} write${unknownTools(tools, status.access)}`,
   })
   rows.push({
     label: "Agents without default rules",
-    value: status.unguardedAgents.length === 0 ? "none" : `${status.unguardedAgents.join(", ")}\n${REMEDY}`,
+    value: status.unguardedAgents.length === 0 ? "none" : `${status.unguardedAgents.join(", ")}\n${remedy(status.access)}`,
   })
   rows.push(
     { label: "OpenCode", value: `${status.host.version ?? "unknown version"} (${status.host.tested ? "tested" : "untested"}; supported range ${status.host.range})` },

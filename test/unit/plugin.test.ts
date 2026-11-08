@@ -246,7 +246,7 @@ describe("setup without a client ID in the options", () => {
     const host = await setUp({ options: CONNECT })
     expect(host.servers.size).toBe(0)
     expect(registrations(host.calls)).toEqual(FULL)
-    expect(host.agents[0]?.permissions[1]).toEqual({ action: "slack_*", resource: "*", effect: "ask" })
+    expect(host.agents[0]?.permissions[1]).toEqual({ action: "slack_*", resource: "*", effect: "allow" })
     const status = await host.status()
     expect(status).toMatchObject({
       state: "not_configured",

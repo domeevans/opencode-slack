@@ -41,10 +41,16 @@ describe("Slack's tools RPC", () => {
     expect(classify("slack_send_message")).toBe("write")
   })
 
-  test("the private search, the file read and the writes ask under the default rules, so a script needs an allow rule", () => {
-    const rules: Rule[] = [{ action: "*", resource: "*", effect: "allow" }, ...defaultRules()]
-    const effect = (tool: string) => rules.findLast((rule) => new RegExp(`^${rule.action.replaceAll("*", ".*")}$`).test(`slack_${tool}`))?.effect
-    expect(METHODS.map((method) => [method.name, effect(method.name)])).toEqual(METHODS.map((method) => [method.name, READS.includes(method.name) ? "allow" : "ask"]))
+  test("every method is allowed under the default rules, and the reads under each restricted value", () => {
+    const effect = (rules: Rule[]) => (tool: string) =>
+      rules.findLast((rule) => rule.resource === "*" && new RegExp(`^${rule.action.replaceAll("*", ".*")}$`).test(`slack_${tool}`))?.effect
+    const base: Rule = { action: "*", resource: "*", effect: "allow" }
+    expect(METHODS.map((method) => [method.name, effect([base, ...defaultRules()])(method.name)]))
+      .toEqual(METHODS.map((method) => [method.name, "allow"]))
+    expect(METHODS.map((method) => [method.name, effect([base, ...defaultRules("ask-changes")])(method.name)]))
+      .toEqual(METHODS.map((method) => [method.name, READS.includes(method.name) ? "allow" : "ask"]))
+    expect(METHODS.map((method) => [method.name, effect([base, ...defaultRules("read-only")])(method.name)]))
+      .toEqual(METHODS.map((method) => [method.name, READS.includes(method.name) ? "allow" : "deny"]))
   })
 
   test("returns Slack's results unchanged and leaves its arguments alone: the model path has no hook either way", () => {
@@ -115,8 +121,17 @@ describe("the tools RPC in setup", () => {
     expect(host.executed).toEqual([{ tool: "slack_slack_read_channel", input: { channel_id: "C1" } }])
   })
 
-  test("a write is a method: refused before dispatch without an allow, and it runs with one", async () => {
-    const host = await setUp({ sessions: { ses_allowed: { agent: "build", permissions: [allow("slack_send_message")] } } })
+  test("at the default access a write runs with no allow rule", async () => {
+    const host = await setUp()
+    expect(await host.script("slack_send_message", "ses_build", { channel_id: "C1", text: "hi" })).toMatchObject({ output: { tool: "slack_slack_send_message" } })
+    expect(host.executed.map((call) => call.tool)).toEqual(["slack_slack_send_message"])
+  })
+
+  test("under ask-changes a write is refused before dispatch with no server call, and an allow rule opens it", async () => {
+    const host = await setUp({
+      options: { oauth: { client_id: "C1" }, access: "ask-changes" },
+      sessions: { ses_allowed: { agent: "build", permissions: [allow("slack_send_message")] } },
+    })
     const refused = await host.script("slack_send_message", "ses_build", { channel_id: "C1", text: "hi" })
     expect(refused).toMatchObject({ error: "failed", data: { code: "PERMISSION_DENIED" }, message: expect.stringContaining("would ask") })
     expect(host.executed).toEqual([])
@@ -124,14 +139,18 @@ describe("the tools RPC in setup", () => {
     expect(host.executed.map((call) => call.tool)).toEqual(["slack_slack_send_message"])
   })
 
-  test("refuses the private search and the file read under the default rules, at once, and runs them with an allow rule", async () => {
-    const host = await setUp({ sessions: { ses_allowed: { agent: "build", permissions: [allow("slack_search_public_and_private"), allow("slack_read_file")] } } })
+  test("the private search and the file read are reads-like methods, so ask-changes asks and read-only denies them", async () => {
+    const asking = await setUp({ options: { oauth: { client_id: "C1" }, access: "ask-changes" } })
     for (const method of ["slack_search_public_and_private", "slack_read_file"]) {
-      const refused = await host.script(method, "ses_build", {})
-      expect(refused).toMatchObject({ error: "failed", data: { code: "PERMISSION_DENIED" }, message: expect.stringContaining("would ask") })
-      expect(await host.script(method, "ses_allowed", {})).toMatchObject({ output: { tool: `slack_${method}` } })
+      expect(await asking.script(method, "ses_build", {})).toMatchObject({ error: "failed", data: { code: "PERMISSION_DENIED" }, message: expect.stringContaining("would ask") })
     }
-    expect(host.executed.map((call) => call.tool)).toEqual(["slack_slack_search_public_and_private", "slack_slack_read_file"])
+    expect(asking.executed).toEqual([])
+
+    const denying = await setUp({ options: { oauth: { client_id: "C1" }, access: "read-only" } })
+    for (const method of ["slack_search_public_and_private", "slack_read_file"]) {
+      expect(await denying.script(method, "ses_build", {})).toMatchObject({ error: "failed", data: { code: "PERMISSION_DENIED" } })
+    }
+    expect(denying.executed).toEqual([])
   })
 
   test("describe lists every known tool with its class, and with a session its resolved permission", async () => {
@@ -141,7 +160,12 @@ describe("the tools RPC in setup", () => {
     expect(Object.fromEntries(described.methods.map((method) => [method.name, method.class]))).toEqual(expected)
     for (const method of described.methods) expect(Object.hasOwn(method, "permission")).toBe(false)
     const withSession = (await host.script("describe", "ses_build")) as { methods: { name: string; permission: string }[] }
-    expect(Object.fromEntries(withSession.methods.map((method) => [method.name, method.permission]))).toEqual(Object.fromEntries(METHODS.map((method) => [method.name, READS.includes(method.name) ? "allow" : "ask"])))
+    expect(Object.fromEntries(withSession.methods.map((method) => [method.name, method.permission]))).toEqual(Object.fromEntries(METHODS.map((method) => [method.name, "allow"])))
+
+    const restricted = await setUp({ options: { oauth: { client_id: "C1" }, access: "ask-changes" } })
+    const resolved = (await restricted.script("describe", "ses_build")) as { methods: { name: string; permission: string }[] }
+    expect(Object.fromEntries(resolved.methods.map((method) => [method.name, method.permission])))
+      .toEqual(Object.fromEntries(METHODS.map((method) => [method.name, READS.includes(method.name) ? "allow" : "ask"])))
   })
 
   test("has no method for an unknown tool", async () => {

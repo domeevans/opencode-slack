@@ -49,7 +49,7 @@ A call is `{ sessionID, input }`. The module:
 5. calls `execute(input, { sessionID, agent, messageID, id, signal, progress })` with a new call id. OpenCode's executor checks `slack_<tool>` on `*` itself, with the agent's rules, the session's rules and saved approvals, and sends OpenCode's own credential;
 6. returns `{ output?, text }`: the tool's structured content and its text parts.
 
-While a call runs, its id is live. A `permission.hook("evaluate")` turns an `ask` whose source id is live into a deny, so the script gets `PERMISSION_DENIED` at once and no prompt waits; this is how the private search and the file read are refused without an allow rule. It changes nothing else; it is the plugin's only permission hook, and the forbidden-API scan allows exactly this one.
+While a call runs, its id is live. A `permission.hook("evaluate")` turns an `ask` whose source id is live into a deny, so the script gets `PERMISSION_DENIED` at once and no prompt waits; this is how an inner ask, such as one the tool makes after it starts, is refused instead of left waiting. It changes nothing else; it is the plugin's only permission hook, and the forbidden-API scan allows exactly this one.
 
 A `Tool.Error` with a cause is a permission refusal; one without a cause is Slack's own error (`isError`), which becomes `UPSTREAM_ERROR` with its first line, at most 300 characters, with tokens and URL queries removed. Any other failure is OpenCode's own and passes through.
 

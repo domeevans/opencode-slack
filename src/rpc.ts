@@ -12,6 +12,7 @@ const status = object({
   code: {
     enum: ["OPTIONS_INVALID", "SERVER_NAME_IN_USE", "HOST_UNTESTED", "CLIENT_ID_MISSING", "CLIENT_ID_INVALID", "AUTH_REQUIRED", "CONNECTION_FAILED", "SERVER_DISABLED"],
   },
+  access: { enum: ["all", "ask-changes", "read-only"] },
   message: text,
   detail: text,
   nextStep: text,
@@ -27,7 +28,7 @@ const status = object({
   unguardedAgents: texts,
   host: object({ version: { type: ["string", "null"] }, range: text, tested: { type: "boolean" } }, ["version", "range", "tested"]),
   shadowedSkills: { type: "array", items: object({ id: text, path: text }, ["id", "path"]) },
-}, ["version", "state", "message", "nextStep", "server", "asksBefore", "tools", "unguardedAgents", "host", "shadowedSkills"])
+}, ["version", "state", "access", "message", "nextStep", "server", "asksBefore", "tools", "unguardedAgents", "host", "shadowedSkills"])
 
 /** The status contract shared by the server, the TUI view and other clients. */
 export const SlackRpc = Rpc.define({

@@ -41,9 +41,9 @@ export function tempDirectory(prefix: string, repository = false): string {
   return path
 }
 
-type Client = Pick<OpenCodeClient, "agent" | "command" | "integration" | "mcp" | "permission" | "plugin" | "rpc" | "session" | "skill">
+type Client = Pick<OpenCodeClient, "agent" | "command" | "experimental" | "integration" | "mcp" | "permission" | "plugin" | "rpc" | "session" | "skill">
 
-const PROJECTS = ["defaults", "rules", "collision", "invalid", "connect", "hosted", "shadowed"] as const
+const PROJECTS = ["defaults", "rules", "collision", "invalid", "connect", "hosted", "shadowed", "accessAll", "accessAsk", "accessReadOnly"] as const
 export type Project = (typeof PROJECTS)[number]
 
 export interface Host {
@@ -80,8 +80,12 @@ const slack = (plugin: string, options: object) => ({ package: plugin, options }
 const probe = (options: object) => ({ package: PROBE, options })
 const configOnly = (description: string, permissions?: Rule[]) => ({ description, mode: "primary", ...(permissions ? { permissions } : {}) })
 
-/** Keeps the built-in local providers from probing their default loopback ports. */
+/**
+ * Keeps the built-in local providers from probing their default loopback ports, and turns on schedules, which is how a
+ * host test runs Code Mode with nobody present to answer a prompt.
+ */
 const LOCAL_PROVIDERS_OFF = {
+  experimental: { schedules: true },
   providers: {
     lmstudio: { settings: { baseURL: "" } },
     ollama: { settings: { baseURL: "" } },
@@ -131,6 +135,13 @@ function projectConfig(project: Project, plugin: string, callLog: string): objec
     case "hosted":
       // A hosted return address, which a proxy forwards to OpenCode's listener on the callback port.
       return { ...LOCAL_PROVIDERS_OFF, plugins: [slack(plugin, { oauth: { client_id: CLIENT_ID, ...HOSTED_OAUTH } }), probe({})] }
+    case "accessAll":
+    case "accessAsk":
+    case "accessReadOnly": {
+      // The one family option that restricts the default rules: everything, changes ask, or read-only.
+      const access = project === "accessAll" ? "all" : project === "accessAsk" ? "ask-changes" : "read-only"
+      return { ...LOCAL_PROVIDERS_OFF, plugins: [slack(plugin, { oauth: { client_id: CLIENT_ID }, access }), probe({ fake: [process.execPath, FAKE_SERVER, callLog] })] }
+    }
   }
 }
 

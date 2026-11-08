@@ -79,16 +79,19 @@ export default {
           <text fg={context.theme.text.base}>Slack</text>
           <Show when={status()} fallback={<text fg={context.theme.text.muted}>{problem() ?? "Loading Slack status…"}</text>}>
             {(current: () => Status) => (
-              <box flexDirection="column">
-                <For each={dialogRows(current())}>
-                  {(row) => (
-                    <box flexDirection="row" gap={1}>
-                      <text fg={context.theme.text.muted} width={29} flexShrink={0}>{row.label}</text>
-                      <text fg={context.theme.text.base} flexShrink={1}>{row.value}</text>
-                    </box>
-                  )}
-                </For>
-              </box>
+              // The permission block can be long, so the rows scroll instead of pushing the footer off the dialog.
+              <scrollbox maxHeight={28} scrollbarOptions={{ visible: false }}>
+                <box flexDirection="column">
+                  <For each={dialogRows(current())}>
+                    {(row) => (
+                      <box flexDirection="row" gap={1}>
+                        <text fg={context.theme.text.muted} width={29} flexShrink={0}>{row.label}</text>
+                        <text fg={context.theme.text.base} flexShrink={1}>{row.value}</text>
+                      </box>
+                    )}
+                  </For>
+                </box>
+              </scrollbox>
             )}
           </Show>
           <Show when={status() !== undefined && problem() !== undefined}>

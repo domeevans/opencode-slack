@@ -134,8 +134,8 @@ describe("the tarball", () => {
     const { files, entryCount, unpackedSize } = pack()
     const paths = files.map((file) => file.path).sort()
     expect(paths).toEqual(expectedFiles())
-    // The one asset is Jelly's icon.
-    expect(paths.filter((path) => path.startsWith("assets/"))).toEqual(["assets/icon.svg"])
+    // The assets are Jelly's icon and the two PNG sizes the icon contract declares.
+    expect(paths.filter((path) => path.startsWith("assets/"))).toEqual(["assets/icon-128.png", "assets/icon-256.png", "assets/icon.svg"])
     expect(paths.filter((path) => /\.(?:tsx|jsx)$/.test(path) || path.includes("node_modules/"))).toEqual([])
     for (const target of Object.values(pkg.exports)) expect(paths).toContain(target.replace(/^\.\//, ""))
     expect(paths.filter((path) => path.endsWith(".d.ts"))).toEqual([])
@@ -147,7 +147,9 @@ describe("the tarball", () => {
   test("has no dependencies, peers or install scripts, and states the tested host range", () => {
     installAlone()
     const manifest = JSON.parse(readFileSync(join(installed, "package.json"), "utf8")) as Record<string, unknown>
-    expect(manifest.opencode).toEqual({ host: ">=2.2.3 <2.3.0" })
+    expect(manifest.opencode).toMatchObject({ host: ">=2.2.3 <2.3.0", vendor: { id: "slack", name: "Slack", domain: "slack.com" } })
+    expect((manifest.opencode as { icons: { src: string }[] }).icons.map((icon) => icon.src))
+      .toEqual(["assets/icon.svg", "assets/icon-128.png", "assets/icon-256.png"])
     for (const field of ["dependencies", "peerDependencies", "peerDependenciesMeta", "optionalDependencies", "bundleDependencies", "bundledDependencies"]) {
       expect({ field, value: manifest[field] }).toEqual({ field, value: undefined })
     }
