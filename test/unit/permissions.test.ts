@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { defaultRules, insertDefaultRules, type Rule } from "../../src/permissions.js"
+import { defaultRules, evaluate, insertDefaultRules, type Rule } from "../../src/permissions.js"
 import { KNOWN_TOOLS, READ_TOOLS } from "../../src/tools.js"
 import { agent, agentEditor, BASE_ALLOW, BASE_RULES } from "./fakes.js"
 
@@ -31,6 +31,13 @@ describe("defaultRules", () => {
     expect(rules[0]).toEqual(deny("slack_*"))
     expect(rules.slice(1, 1 + READ_TOOLS.length)).toEqual(READ_TOOLS.map((tool) => allow(`slack_${tool}`)))
     expect(rules.slice(1 + READ_TOOLS.length)).toEqual(OTHER.map((tool) => deny(`slack_${tool}`)))
+  })
+
+  test("gives a tool Slack adds later the value's effect, and always runs the reads", () => {
+    for (const [access, effect] of [["all", "allow"], ["ask-changes", "ask"], ["read-only", "deny"]] as const) {
+      expect({ access, effect: evaluate([allow("*"), ...defaultRules(access)], "slack_new_tool") }).toEqual({ access, effect })
+      for (const read of READ_TOOLS) expect({ access, read, effect: evaluate([allow("*"), ...defaultRules(access)], `slack_${read}`) }).toEqual({ access, read, effect: "allow" })
+    }
   })
 
   test("names every known tool exactly once, after its namespace rule", () => {
