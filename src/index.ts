@@ -2,6 +2,7 @@ import { Plugin } from "@opencode/plugin"
 import { SERVER } from "./defaults.js"
 import { registerAppIntegration, resolveClient, sameClient, serverNamer, type ClientState } from "./connect.js"
 import { isSupportedHost, isTestedHost } from "./host-version.js"
+import { eventsMethod, eventsTool, type EventsToolOptions } from "./events.js"
 import { registerToolsRpc } from "./host/tools-rpc.js"
 import { parseOptions } from "./options.js"
 import { insertDefaultRules } from "./permissions.js"
@@ -55,6 +56,10 @@ export default Plugin.define({
     let client: ClientState = { invalid: false }
     let bundled: readonly ListedSkill[] = []
     let cleanup = async () => {}
+    // Memory's source of Slack events: a Code Mode tool in the slack namespace, and the tools RPC method events_list.
+    const events: EventsToolOptions | undefined = options === undefined
+      ? undefined
+      : { tool: ctx.tool, permission: ctx.permission, channels: options.channels, owned: () => !nameInUse, status: () => status() }
 
     if (options !== undefined) {
       const fromConnect = options.clientId === undefined
@@ -63,8 +68,11 @@ export default Plugin.define({
       await ctx.mcp.transform((editor) => {
         nameInUse = !registerServer(editor, options, client.client)
       })
-      // Code Mode's catalog describes the server's namespace with this text.
-      await ctx.tool.transform((editor) => editor.namespace({ name: SERVER, description: NAMESPACE_DESCRIPTION }))
+      // Code Mode's catalog describes the server's namespace with this text; slack_events_list is the plugin's own tool in it.
+      await ctx.tool.transform((editor) => {
+        editor.namespace({ name: SERVER, description: NAMESPACE_DESCRIPTION })
+        editor.add(eventsTool(events!))
+      })
       await ctx.agent.transform((editor) => insertDefaultRules(editor))
       const skills = await loadSkills()
       bundled = skills
@@ -150,6 +158,7 @@ export default Plugin.define({
             ? undefined
             : { code: client.invalid ? "CLIENT_ID_INVALID" : "CLIENT_ID_MISSING", next: clientNextStep() },
         },
+        ...(events === undefined ? {} : { owned: [eventsMethod(events)] }),
       })
 
     await ctx.command.transform((editor) => {

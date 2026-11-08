@@ -30,18 +30,32 @@ const tableCodes = (text: string, column: number) =>
     return [...cell.matchAll(/`([A-Z][A-Z_]{3,}[A-Z])`/g)].map((match) => match[1]!)
   }))
 
-/** The plugin's own error codes, written as `CODE: what happened` in its sources, outside the shared tools RPC. */
+/**
+ * The plugin's own error codes, written as `CODE: what happened` in its sources, or as `eventsError("CODE", …)` by
+ * slack_events_list, outside the shared tools RPC.
+ */
 function raisedInSources(): Set<string> {
   const files = readdirSync(join(ROOT, "src")).filter((name) => /\.tsx?$/.test(name))
-  return new Set(files.flatMap((name) => [...read(join("src", name)).matchAll(/["`]([A-Z]+(?:_[A-Z]+)+): /g)].map((match) => match[1]!)))
+  return new Set(files.flatMap((name) => [...read(join("src", name)).matchAll(/["`]([A-Z]+(?:_[A-Z]+)+): |eventsError\(\s*"([A-Z]+(?:_[A-Z]+)+)"/g)].map((match) => (match[1] ?? match[2])!)))
 }
 
 const statusCodes = (SlackRpc.methods.status.output as unknown as { properties: { code: { enum: string[] } } }).properties.code.enum
 const PLUGIN_CODES = new Set([...statusCodes, ...raisedInSources()])
 
 describe("the errors tables", () => {
-  test("the plugin raises STATUS_UNAVAILABLE and SKILLS_INVALID besides the status codes", () => {
-    expect([...raisedInSources()].sort()).toEqual(["SKILLS_INVALID", "STATUS_UNAVAILABLE"])
+  test("the plugin raises STATUS_UNAVAILABLE, SKILLS_INVALID and slack_events_list's codes besides the status codes", () => {
+    expect([...raisedInSources()].sort()).toEqual([
+      "ACCOUNT_UNKNOWN",
+      "CURSOR_INVALID",
+      "INPUT_INVALID",
+      "SKILLS_INVALID",
+      "SOURCE_UNKNOWN",
+      "STATUS_UNAVAILABLE",
+      "TOOL_UNAVAILABLE",
+      "TOO_MANY_MESSAGES",
+      "UPSTREAM_ERROR",
+      "UPSTREAM_UNREADABLE",
+    ])
   })
 
   test("docs/configuration.md Errors lists exactly the codes the plugin raises", () => {

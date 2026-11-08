@@ -136,6 +136,12 @@
         "readOnly": true
       },
       {
+        "name": "slack.events_list",
+        "permission": "slack_events_list",
+        "effect": "allow",
+        "readOnly": true
+      },
+      {
         "name": "slack.slack_search_public_and_private",
         "permission": "slack_slack_search_public_and_private",
         "effect": "ask",

@@ -38,7 +38,8 @@ export const PLUGIN_ID = "slack.workspace"
  * The MCP tools that become methods, by their upstream name (the tool id without the `<server>_` prefix). Only known
  * reads belong here: an allowlist, so a tool the server adds later is never a method. Slack's are the twelve reads,
  * the private search and the file read from `src/tools.ts`; the last two ask by default, so a script is refused them
- * until an allow rule exists.
+ * until an allow rule exists. The plugin's own `slack_events_list` is the owned method `events_list`, registered in
+ * setup.
  */
 export const KNOWN_READS: readonly string[] = SCRIPTABLE_TOOLS
 
@@ -64,9 +65,14 @@ export const NEXT_STEPS: NextSteps = {
   CANCELLED: "Call the method again if you still need the result.",
 }
 
-/** The plugin's own errors, thrown by plugin-owned specs, as a code, what happened and the next step. Slack has none. */
-export function pluginError(_error: unknown): Failure | undefined {
-  return undefined
+/**
+ * The plugin's own errors, thrown by the `events_list` method's spec (`eventsError`), as a code, what happened and the
+ * next step.
+ */
+export function pluginError(error: unknown): Failure | undefined {
+  if (!(error instanceof Error)) return undefined
+  const { code, detail, nextStep } = error as Error & { code?: unknown; detail?: unknown; nextStep?: unknown }
+  return typeof code === "string" && typeof detail === "string" && typeof nextStep === "string" ? { code, what: detail, next: nextStep } : undefined
 }
 
 // <<< PLUGIN-SPECIFIC <<<

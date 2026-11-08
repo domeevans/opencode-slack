@@ -1,5 +1,6 @@
 import type { Plugin } from "@opencode/plugin"
 import { SERVER } from "./defaults.js"
+import { EVENTS_LIST } from "./host/events-list.js"
 import { READ_TOOLS } from "./tools.js"
 
 type AgentEditor = Parameters<Parameters<Plugin.Context["agent"]["transform"]>[0]>[0]
@@ -10,11 +11,14 @@ export interface Rule {
   readonly effect: "allow" | "ask" | "deny"
 }
 
-/** Ask before every tool on the server, then allow the known reads. Later rules win. */
+/**
+ * Ask before every tool on the server, then allow the known reads, and the plugin's own `slack_events_list`, which only
+ * reads and which Memory's collector runs with no one there. Later rules win.
+ */
 export function defaultRules(): Rule[] {
   return [
     { action: `${SERVER}_*`, resource: "*", effect: "ask" },
-    ...READ_TOOLS.map((tool): Rule => ({ action: `${SERVER}_${tool}`, resource: "*", effect: "allow" })),
+    ...[...READ_TOOLS, EVENTS_LIST].map((tool): Rule => ({ action: `${SERVER}_${tool}`, resource: "*", effect: "allow" })),
   ]
 }
 

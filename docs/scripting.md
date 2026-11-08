@@ -9,9 +9,12 @@ A script can call Slack's read tools with no model: a cron job, a shell script, 
 | `slack_search_public`, `slack_search_channels`, `slack_search_users`, `slack_read_channel`, `slack_read_thread`, `slack_read_user_profile`, `slack_read_canvas`, `slack_list_channel_members`, `slack_get_reactions`, `slack_list_user_channels`, `slack_read_list`, `slack_search_emojis` | `slack_<method>`, for example `slack_slack_search_public` | allow |
 | `slack_search_public_and_private` | `slack_slack_search_public_and_private` | ask: refused to scripts until an allow rule exists |
 | `slack_read_file` | `slack_slack_read_file` | ask: refused to scripts until an allow rule exists |
+| `events_list` | `slack_events_list`: the messages posted since a cursor in the channels of the `events.channels` option, as Memory's events ([configuration](configuration.md#events-list)) | allow |
 | `describe` | none: lists the methods, their permission actions, whether OpenCode lists each tool now, and each tool's input as JSON Schema | |
 
 Each method's permission action is the tool name with the server's prefix, `slack_`, for example `slack_slack_search_public`.
+
+`events_list` is the plugin's own read for Memory's collector. It runs `slack_events_list`'s own spec as the session and its agent: it asserts `slack_events_list`, then reads `slack_read_user_profile` and `slack_read_channel` through OpenCode's executors, so each read's rules apply. Its own refusals, such as a cursor from another workspace, are the codes in the configuration guide's [Errors](configuration.md#errors); a refused read is `PERMISSION_DENIED` naming that read.
 
 Each method runs the tool with the same input: Slack's own tool, through OpenCode's own connection and sign-in. The plugin never sees the Slack token. Only these fourteen reads are methods. Slack's writes and sends (`slack_send_message`, `slack_send_message_draft`, `slack_schedule_message`, `slack_create_canvas`, `slack_update_canvas`, `slack_add_reaction`, `slack_get_file_upload_url`, `slack_complete_file_upload`, `slack_create_conversation`, `slack_create_list`, `slack_update_list`, `slack_add_list_record`, `slack_update_list_record`) and any tool Slack adds later are never methods, even with an allow rule.
 

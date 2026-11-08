@@ -9,7 +9,8 @@ The plugin is configuration and status code around Slack's hosted MCP server. Op
 | Server | `src/index.ts` (`slack.workspace`) | Reads the options, resolves the Slack app client, registers the MCP server, the default permission rules, the skill, `/slack-status`, the status RPC and the tools RPC. |
 | TUI | `src/tui.tsx` (`slack.workspace.tui`) | The palette command **Slack: Status** and `/slack`, which open one dialog that renders the status RPC. |
 | RPC contract | `src/rpc.ts` (`slack.workspace`) | The JSON Schema contract of the `status` method. Inlined into both bundles: the server registers it and the TUI calls it. `exports` lists only `.` and `./tui`. |
-| Tools RPC | `src/host/tools-rpc.ts` (`slack.workspace.tools`) | `describe` and one method per known read, so a script can call them with no model ([Scripting](scripting.md)). A copy of a module shared by several plugins, with Slack's part in one marked block. Inlined into `dist/index.js`. |
+| Tools RPC | `src/host/tools-rpc.ts` (`slack.workspace.tools`) | `describe`, one method per known read, and the owned method `events_list`, so a script can call them with no model ([Scripting](scripting.md)). A copy of a module shared by several plugins, with Slack's part in one marked block. Inlined into `dist/index.js`. |
+| Events list | `src/events.ts`, `src/host/events-list.ts` | `slack_events_list`, Memory's source of Slack events: the messages of the enabled channels as the shared `events_list` contract's events. `host/events-list.ts` is the contract, a copy every source plugin carries unchanged. |
 
 ## Build
 
@@ -25,16 +26,18 @@ The plugin is configuration and status code around Slack's hosted MCP server. Op
 - `status.ts`: the one status model and its rows. `/slack-status`, the RPC and the dialog all render it.
 - `skills.ts`: loads `skills/slack-search/SKILL.md`.
 - `host-version.ts`: the supported range check, and the tested releases.
+- `events.ts`: `slack_events_list` and its tools RPC method. It parses Slack's answers (JSON, else the labelled Markdown lines), reads each enabled channel after its cursor `ts`, halves a window too large for one call, and reads only through the host's executors.
+- `host/events-list.ts`: the shared `events_list` contract: the event type and limits, input, cursors, `makeEvent`, `fitPage`, the checks and the conformance test. `scripts/check-copies.mjs` pins its hash.
 
 ## Runtime flow
 
 1. Setup parses the options and checks the host version. On invalid options, or a host outside the supported range, it registers only the status surfaces.
 2. Without `oauth.client_id`, it adds **Slack app client ID** to `/connect` and reads the stored client from OpenCode's credential store.
-3. The MCP transform registers `https://mcp.slack.com/mcp` with that client, or nothing when there is none. A tool transform gives the server's Code Mode namespace its description (`NAMESPACE_DESCRIPTION` in `tools.ts`).
-4. When the plugin is set up, the tools RPC registers after the status RPC, for the server `slack`. It is a conflict while `nameInUse` is set.
+3. The MCP transform registers `https://mcp.slack.com/mcp` with that client, or nothing when there is none. A tool transform gives the server's Code Mode namespace its description (`NAMESPACE_DESCRIPTION` in `tools.ts`) and adds `slack_events_list` to it.
+4. When the plugin is set up, the tools RPC registers after the status RPC, for the server `slack`, with `events_list` as its owned method. It is a conflict while `nameInUse` is set.
 5. A background listener handles `credential.updated` and `credential.switched` (the client changed: `ctx.mcp.reload()`) and `integration.updated` (OpenCode re-registered the server's integration: rename it **Slack** again). Setup's cleanup stops it.
 
-The plugin defines no tools, makes no network requests and never reads Slack tokens.
+The plugin defines one tool, `slack_events_list`, which reads only through the host's executors. It makes no network requests and never reads Slack tokens.
 
 ## Tools RPC
 
