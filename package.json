@@ -19,18 +19,51 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
-    "./tui": "./dist/tui.js"
+    "./tui": "./dist/tui.js",
+    "./icon.svg": "./assets/icon.svg",
+    "./icon-128.png": "./assets/icon-128.png",
+    "./icon-256.png": "./assets/icon-256.png"
   },
   "files": [
     "dist",
     "assets/icon.svg",
+    "assets/icon-128.png",
+    "assets/icon-256.png",
     "skills",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"
   ],
   "opencode": {
-    "host": ">=2.2.3 <2.3.0"
+    "host": ">=2.2.3 <2.3.0",
+    "icons": [
+      {
+        "src": "assets/icon.svg",
+        "mimeType": "image/svg+xml",
+        "sizes": [
+          "any"
+        ]
+      },
+      {
+        "src": "assets/icon-128.png",
+        "mimeType": "image/png",
+        "sizes": [
+          "128x128"
+        ]
+      },
+      {
+        "src": "assets/icon-256.png",
+        "mimeType": "image/png",
+        "sizes": [
+          "256x256"
+        ]
+      }
+    ],
+    "vendor": {
+      "id": "slack",
+      "name": "Slack",
+      "domain": "slack.com"
+    }
   },
   "scripts": {
     "build": "bun scripts/build.ts",
@@ -40,7 +73,9 @@
     "test:host": "bun test test/host",
     "test:pack": "bun test test/pack",
     "drift": "bun scripts/drift.ts",
-    "check": "npm run typecheck && node scripts/check-copies.mjs && npm run build && npm test && npm run test:tui && npm run test:host && npm run test:pack"
+    "check": "npm run typecheck && node scripts/check-copies.mjs && npm run build && npm test && npm run test:tui && npm run test:host && npm run test:pack && npm run icons && npm run actionlint",
+    "icons": "node scripts/check-icons.mjs",
+    "actionlint": "node scripts/check-actionlint.mjs"
   },
   "devDependencies": {
     "@babel/core": "7.29.7",
