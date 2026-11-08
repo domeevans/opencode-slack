@@ -12,12 +12,13 @@ Report vulnerabilities privately through GitHub: on this repository, open **Secu
 
 ### What the plugin does
 
-The plugin is configuration and status code. It makes no network requests, defines no tools and never reads your Slack tokens. When OpenCode loads it, it:
+The plugin is configuration and status code, and one read tool for Memory. It makes no network requests and never reads your Slack tokens. When OpenCode loads it, it:
 
 - adds Slack's hosted MCP server, `https://mcp.slack.com/mcp`, to OpenCode with your Slack app's OAuth client;
 - without `oauth.client_id` in its options, adds **Slack app client ID** to `/connect` and reads that entry (the client ID and an optional client secret) from OpenCode's credential store;
 - adds the default rules to each agent: Slack tools ask, and the known reads are allowed;
-- registers `/slack-status`, the status RPC, the tools RPC for scripts, the TUI `/slack` dialog and the `slack-search` skill.
+- registers `/slack-status`, the status RPC, the tools RPC for scripts, the TUI `/slack` dialog and the `slack-search` skill;
+- adds `slack_events_list`, Memory's source of Slack events. It reads, through OpenCode, your own profile and only the conversations you list in `events.channels`, never the private search or a file, and returns their messages as events marked untrusted. Its cursor holds message timestamps and a digest of the workspace and user, never a token.
 
 OpenCode does everything else. It connects to Slack over HTTPS, runs the OAuth sign-in (PKCE for public apps), stores the credential outside your project config, refreshes it, and asks before tool calls according to your permission rules. `opencode mcp logout slack` deletes the Slack sign-in, and `opencode auth logout slack-app` deletes the saved client.
 
@@ -52,7 +53,7 @@ The tools RPC (`slack.workspace.tools`, see [docs/scripting.md](https://github.c
 
 - A script names a session that names an agent, and runs as them. A tool that the agent's or the session's rules hide from the model is refused. OpenCode's own executor then checks the call against the agent's rules, the session's rules and saved approvals, as it does for the model.
 - An ask on a script's call is denied, not prompted: no one is there to answer it. So the private search and the file read, which ask by default, are refused to scripts until an allow rule or a saved approval exists. The plugin's permission hook changes only an ask on one of its own script calls in flight, only to a deny, and leaves every other call alone.
-- Only the fourteen known reads are methods. Slack's writes and sends, and any tool that Slack adds later, are never methods, even with an allow rule.
+- Only the fourteen known reads and the plugin's own `events_list` are methods. Slack's writes and sends, and any tool that Slack adds later, are never methods, even with an allow rule.
 - The call goes through OpenCode's own MCP connection and sign-in. The plugin never sees the Slack token, and returns none.
 - Slack's error text reaches the script only as the first line, at most 300 characters, with tokens and URL query strings removed. Results are Slack content, which is untrusted, as for the model.
 - OpenCode's `execute.before` and `execute.after` tool hooks, from any plugin, do not run for a script's call, so another plugin's policy hook does not see it. A script's calls are not recorded in the session; Slack records them in its audit logs.

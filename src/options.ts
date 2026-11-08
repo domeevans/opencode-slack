@@ -1,4 +1,5 @@
 import { CALLBACK_PORT_EXAMPLE, DEFAULT_REDIRECT_URI, DEFAULT_SCOPES, HOSTED_REDIRECT_EXAMPLE } from "./defaults.js"
+import { CHANNEL_ID, MAX_CHANNELS } from "./events.js"
 
 export interface Options {
   /** Pins the Slack app, for example in an organisation's managed config. Otherwise the /connect Slack app client ID entry sets it. */
@@ -9,6 +10,8 @@ export interface Options {
   readonly scopes: readonly string[]
   readonly clientSecret?: string
   readonly allowUntestedHost: boolean
+  /** The channel and direct message ids `slack_events_list` reads, in order; none by default. */
+  readonly channels: readonly string[]
 }
 
 /** A rejected option. Messages name the field and never echo its value. */
@@ -23,7 +26,8 @@ export type ParsedOptions =
   | { readonly ok: true; readonly options: Options }
   | { readonly ok: false; readonly error: OptionsError }
 
-const TOP_KEYS = ["oauth", "allowUntestedHost"]
+const TOP_KEYS = ["oauth", "allowUntestedHost", "events"]
+const EVENTS_KEYS = ["channels"]
 const OAUTH_KEYS = ["client_id", "redirect_uri", "callback_port", "scopes", "client_secret"]
 const NO_SPACES = /^\S+$/
 
@@ -115,6 +119,21 @@ export function parseOptions(input: unknown): ParsedOptions {
     return fail("allowUntestedHost", "Must be true or false.", "Set it to true only to run on an OpenCode version outside the supported range.")
   }
 
+  const events = raw.events ?? {}
+  if (!isRecord(events)) return fail("events", "Must be an object.", 'Set events to an object such as { "channels": ["C0123ABCD45"] }.')
+  const unknownEventsKey = Object.keys(events).find((key) => !EVENTS_KEYS.includes(key))
+  if (unknownEventsKey !== undefined) {
+    return fail(`events.${unknownEventsKey}`, "This option is not supported.", `Remove it. Supported events options: ${EVENTS_KEYS.join(", ")}.`)
+  }
+  const channels: unknown = events.channels ?? []
+  if (!Array.isArray(channels) || !channels.every((id) => typeof id === "string" && CHANNEL_ID.test(id))) {
+    return fail("events.channels", "Must be a list of Slack conversation or user ids, such as C0123ABCD45.", "List the ids of the channels and direct messages to collect: a channel's id is at the bottom of its details in Slack.")
+  }
+  if (new Set(channels).size !== channels.length) return fail("events.channels", "Lists a channel more than once.", "Remove the duplicate id.")
+  if (channels.length > MAX_CHANNELS) {
+    return fail("events.channels", `Lists more than ${MAX_CHANNELS} channels.`, `Keep the ${MAX_CHANNELS} channels and direct messages that matter most.`)
+  }
+
   return {
     ok: true,
     options: {
@@ -124,6 +143,7 @@ export function parseOptions(input: unknown): ParsedOptions {
       scopes: [...scopes],
       ...(clientSecret === undefined ? {} : { clientSecret }),
       allowUntestedHost,
+      channels: [...channels] as string[],
     },
   }
 }

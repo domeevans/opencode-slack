@@ -23,11 +23,13 @@ describe("defaultRules", () => {
       allow("slack_slack_list_user_channels"),
       allow("slack_slack_read_list"),
       allow("slack_slack_search_emojis"),
+      // The plugin's own slack_events_list, which only reads, for Memory's collector.
+      allow("slack_events_list"),
     ])
   })
 
-  test("allows exactly the read tools", () => {
-    expect(defaultRules().slice(1)).toEqual(READ_TOOLS.map((tool) => allow(`slack_${tool}`)))
+  test("allows exactly the read tools and the plugin's own events_list", () => {
+    expect(defaultRules().slice(1)).toEqual([...READ_TOOLS, "events_list"].map((tool) => allow(`slack_${tool}`)))
   })
 })
 

@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `slack_events_list`, Memory's source of Slack events: the messages posted since a cursor in the channels and direct messages listed in the new `events.channels` option (at most 16), oldest first, as the shared `events_list` contract's events (`src/host/events-list.ts`, pinned by `scripts/check-copies.mjs`). It reads `slack_read_user_profile` and `slack_read_channel` through OpenCode, never the private search or a file, parses Slack's Markdown answers into structured events, is a Code Mode tool and the tools RPC method `events_list`, and has a default allow rule and a `jelly` declaration as a read that never asks. New error codes: `INPUT_INVALID`, `SOURCE_UNKNOWN`, `ACCOUNT_UNKNOWN`, `CURSOR_INVALID`, `TOO_MANY_MESSAGES`, `UPSTREAM_ERROR`, `UPSTREAM_UNREADABLE` and `TOOL_UNAVAILABLE`.
+
 ## [0.0.7] - 2026-11-06
 
 ### Added

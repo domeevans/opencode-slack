@@ -191,11 +191,12 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         sessions.unconfigured = await create({ agent: "build" }, "connect")
       }, 60_000)
 
-      test("describes exactly the known reads, with their live schemas; no write, send or unknown tool is a method", async () => {
+      test("describes exactly the known reads, with their live schemas, and events_list; no write, send or unknown tool is a method", async () => {
         const { value } = await script("describe", {})
         expect(value.id).toBe(TOOLS_RPC_ID)
-        expect(value.methods.map((method: { name: string }) => method.name)).toEqual([...KNOWN_READS])
-        for (const method of value.methods) expect({ ...method, description: undefined, output: undefined }).toEqual({ name: method.name, tool: `slack_${method.name}`, kind: "mcp", action: `slack_${method.name}`, available: true, input: fakeInput(method.name), description: undefined, output: undefined })
+        expect(value.methods.map((method: { name: string }) => method.name)).toEqual([...KNOWN_READS, "events_list"])
+        expect(value.methods.at(-1)).toMatchObject({ name: "events_list", tool: "events_list", kind: "plugin", action: "slack_events_list", available: true })
+        for (const method of value.methods.filter((item: { kind: string }) => item.kind === "mcp")) expect({ ...method, description: undefined, output: undefined }).toEqual({ name: method.name, tool: `slack_${method.name}`, kind: "mcp", action: `slack_${method.name}`, available: true, input: fakeInput(method.name), description: undefined, output: undefined })
         const from = host.toolCalls().length
         const excluded = FAKE_TOOLS.filter((tool) => ["write", "unknown"].includes(classify(tool)))
         expect(excluded.length).toBe(14)
@@ -265,7 +266,20 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
       test("refuses with SERVER_CONFLICT while the user's own server holds the name", async () => {
         expect(await run("collision", "slack_search_public", { query: "q" }, "collision")).toMatchObject({ type: "failed", code: "SERVER_CONFLICT" })
         const { value } = await script("describe", {}, "collision")
-        expect(value.methods.every((method: { available: boolean; reason: string }) => !method.available && method.reason === "SERVER_CONFLICT")).toBe(true)
+        const mcp = value.methods.filter((method: { kind: string }) => method.kind === "mcp")
+        expect(mcp.every((method: { available: boolean; reason: string }) => !method.available && method.reason === "SERVER_CONFLICT")).toBe(true)
+        // events_list gives status's own code, as its calls do.
+        expect(value.methods.find((method: { name: string }) => method.name === "events_list")).toMatchObject({ available: false, reason: "SERVER_NAME_IN_USE" })
+      })
+
+      test("events_list reads through OpenCode's own connection, and reports an answer it cannot read with its own code", async () => {
+        const from = host.toolCalls().length
+        // The fake answers every tool with its name and arguments, not with a Slack profile.
+        const result = await run("build", "events_list", {})
+        expect(result).toMatchObject({ type: "failed", code: "UPSTREAM_UNREADABLE" })
+        expect(result.message).toContain("UPSTREAM_UNREADABLE: Slack's slack_read_user_profile answered in a shape events_list does not read.")
+        expect(since(from)).toEqual(["slack_read_user_profile"])
+        expect(await run("build", "events_list", { limit: 0 })).toMatchObject({ type: "failed", code: "INPUT_INVALID" })
       })
 
       test("without a Slack app client ID, refuses with CLIENT_ID_MISSING and /slack-status's next step", async () => {

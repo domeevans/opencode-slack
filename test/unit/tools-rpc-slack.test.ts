@@ -114,10 +114,10 @@ describe("the tools RPC in setup", () => {
     expect(host.executed.map((call) => call.tool)).toEqual(["slack_slack_search_public_and_private", "slack_slack_read_file"])
   })
 
-  test("has no method for a write, a send or an unknown tool", async () => {
+  test("has no method for a write, a send or an unknown tool, and one owned method, events_list", async () => {
     const host = await setUp()
     const methods = Object.keys(host.rpcs.get(TOOLS_RPC_ID)!)
-    expect(methods.sort()).toEqual(["describe", ...KNOWN_READS].sort())
+    expect(methods.sort()).toEqual(["describe", "events_list", ...KNOWN_READS].sort())
     for (const tool of [...WRITES, UNKNOWN]) expect(() => host.script(tool, "ses_build")).toThrow(/no method/)
   })
 
@@ -136,7 +136,7 @@ describe("the tools RPC in setup", () => {
     expect(refused).toMatchObject({ error: "failed", data: { code: "CLIENT_ID_MISSING", next: status.nextStep } })
     expect(refused.message).toBe(`CLIENT_ID_MISSING: the "slack" server is not registered. Next step: ${status.nextStep}`)
     const described = (await host.script("describe", "")) as { methods: { available: boolean; reason?: string }[] }
-    expect(described.methods.map((method) => [method.available, method.reason])).toEqual(KNOWN_READS.map(() => [false, "CLIENT_ID_MISSING"]))
+    expect(described.methods.map((method) => [method.available, method.reason])).toEqual([...KNOWN_READS, "events_list"].map(() => [false, "CLIENT_ID_MISSING"]))
     expect(host.executed).toEqual([])
   })
 
