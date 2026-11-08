@@ -19,11 +19,10 @@ writes each declared `ask` or `deny` as that tool's default instead (the person'
 replaces it), and denies a read-only helper every tool not marked `readOnly`. A declared `allow`
 changes nothing in Jelly.
 
-- Ask: `slack_slack_search_public_and_private`, `slack_slack_read_file`, `slack_slack_send_message`, `slack_slack_send_message_draft`, `slack_slack_schedule_message`, `slack_slack_create_canvas`, `slack_slack_update_canvas`, `slack_slack_add_reaction`, `slack_slack_get_file_upload_url`, `slack_slack_complete_file_upload`, `slack_slack_create_conversation`, `slack_slack_create_list`, `slack_slack_update_list`, `slack_slack_add_list_record`, `slack_slack_update_list_record`.
-- Off: none.
-- Everything else runs, as the plugin's own rules let it.
+- Ask: none. Every tool is declared `allow`, so a Jelly agent runs what the plugin's own default allows.
+- Off: none. To make one ask or stop, declare `ask` or `deny` for it, or set the plugin's `access` option in the agent's options.
 
-Private search and file reads ask, as the plugin's own rules do, and are marked read-only.
+Private search and file reads are marked read-only and, like every tool, allowed by default; declare a later `ask` rule if the agent should not read private content.
 
 A tool the upstream server adds later is not declared, so in Jelly it is not asked about by
 default. Keep `jelly.tools` in step with the known-tool list; `test/**/jelly.test.ts` checks
