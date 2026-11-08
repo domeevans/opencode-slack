@@ -2,13 +2,12 @@
 // own errors in docs/configuration.md "Errors" and the README's Troubleshooting, the tools RPC's in docs/scripting.md
 // "Errors". Each status next step appears verbatim in the configuration table, so the docs cannot drift from status.
 import { describe, expect, test } from "bun:test"
-import { readdirSync, readFileSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { PLUGIN_CODES } from "../../src/codes.js"
 import { parseOptions } from "../../src/options.js"
-import { SlackRpc } from "../../src/rpc.js"
 import { buildStatus, type StatusInput } from "../../src/status.js"
-import { NEXT_STEPS } from "../../src/host/tools-rpc.js"
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url))
 const read = (file: string) => readFileSync(join(ROOT, file), "utf8")
@@ -30,33 +29,10 @@ const tableCodes = (text: string, column: number) =>
     return [...cell.matchAll(/`([A-Z][A-Z_]{3,}[A-Z])`/g)].map((match) => match[1]!)
   }))
 
-/** The plugin's own error codes, written as `CODE: what happened` in its sources, outside the shared tools RPC. */
-function raisedInSources(): Set<string> {
-  const files = readdirSync(join(ROOT, "src")).filter((name) => /\.tsx?$/.test(name))
-  return new Set(files.flatMap((name) => [...read(join("src", name)).matchAll(/["`]([A-Z]+(?:_[A-Z]+)+): /g)].map((match) => match[1]!)))
-}
-
-const statusCodes = (SlackRpc.methods.status.output as unknown as { properties: { code: { enum: string[] } } }).properties.code.enum
-const PLUGIN_CODES = new Set([...statusCodes, ...raisedInSources()])
-
 describe("the errors tables", () => {
-  test("the plugin raises STATUS_UNAVAILABLE and SKILLS_INVALID besides the status codes", () => {
-    expect([...raisedInSources()].sort()).toEqual(["SKILLS_INVALID", "STATUS_UNAVAILABLE"])
-  })
-
+  // The README's and the scripting doc's tables are checked against the same table in test/unit/codes.test.ts.
   test("docs/configuration.md Errors lists exactly the codes the plugin raises", () => {
     expect([...tableCodes(section(read("docs/configuration.md"), "## Errors"), 0)].sort()).toEqual([...PLUGIN_CODES].sort())
-  })
-
-  test("the README's Troubleshooting table lists exactly the status codes", () => {
-    const table = section(read("README.md"), "## Troubleshooting")
-    expect([...tableCodes(table, 1)].sort()).toEqual([...statusCodes].sort())
-    for (const code of ["STATUS_UNAVAILABLE", "SKILLS_INVALID"]) expect({ code, named: table.includes(code) }).toEqual({ code, named: true })
-  })
-
-  test("docs/scripting.md Errors lists exactly the codes the tools RPC raises", () => {
-    const raised = new Set([...Object.keys(NEXT_STEPS), "CLIENT_ID_MISSING", "CLIENT_ID_INVALID"])
-    expect([...tableCodes(section(read("docs/scripting.md"), "## Errors"), 0)].sort()).toEqual([...raised].sort())
   })
 })
 

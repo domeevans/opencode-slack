@@ -1,3 +1,4 @@
+import type { PluginCode } from "./codes.js"
 import { APP_NAME, SERVER_DISPLAY_NAME, type ClientState } from "./connect.js"
 import { APP_MANIFEST_URL, SERVER, SLACK_MCP_URL, SUPPORTED_HOST_RANGE } from "./defaults.js"
 import type { ParsedOptions } from "./options.js"
@@ -16,22 +17,12 @@ type State =
   | "conflict"
   | "host_untested"
 
-type ErrorCode =
-  | "OPTIONS_INVALID"
-  | "SERVER_NAME_IN_USE"
-  | "HOST_UNTESTED"
-  | "CLIENT_ID_MISSING"
-  | "CLIENT_ID_INVALID"
-  | "AUTH_REQUIRED"
-  | "CONNECTION_FAILED"
-  | "SERVER_DISABLED"
-
 /** What every status surface shows. JSON-safe; never contains a client secret, a token or a URL's query. */
 export interface Status {
   /** The plugin's version. */
   readonly version: string
   readonly state: State
-  readonly code?: ErrorCode
+  readonly code?: PluginCode
   readonly message: string
   /** The host's reason for a failed connection: one line, at most 160 characters, URLs without their query. */
   readonly detail?: string
