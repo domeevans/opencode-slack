@@ -24,7 +24,7 @@ To try a checkout in OpenCode, build it with `npm run build` and point a `plugin
 By default, the host and package tests install `@opencode/cli` from npm into a temporary directory, once per version and run. To use binaries you already have:
 
 ```sh
-OPENCODE_BIN_2_2_3=/path/to/2.2.3/opencode OPENCODE_BIN_2_2_4=/path/to/2.2.4/opencode OPENCODE_BIN_2_2_5=/path/to/2.2.5/opencode npm run check
+OPENCODE_BIN_2_2_3=/path/to/2.2.3/opencode OPENCODE_BIN_2_2_4=/path/to/2.2.4/opencode OPENCODE_BIN_2_2_5=/path/to/2.2.5/opencode OPENCODE_BIN_2_2_6=/path/to/2.2.6/opencode npm run check
 ```
 
 `npm install --prefix <dir> --ignore-scripts @opencode/cli@2.2.3` gets one; the binary is `node_modules/@opencode/cli-<os>-<arch>/bin/opencode` in that directory. The tests check each binary's version and that OpenCode's paths stay inside the test's temporary root. Each root is a git repository under the system's `/tmp`, never under `TMPDIR` or your home, so OpenCode cannot pick up your own `.opencode` agents or skills; each stock host listens on its own free port. They never call Slack.

@@ -233,6 +233,16 @@ Sign out while the plugin is still installed: once it is removed, OpenCode no lo
 4. Remove the plugin: `opencode plugin remove @joe-broadhead/opencode-slack`, then `opencode reload`. `opencode mcp list` no longer lists `slack`.
 5. Remove any Slack rules you copied into your agents' own `permissions`.
 
+## Known limits
+
+- **Slack's server and Slack's tools.** The plugin adds Slack's hosted MCP server and nothing else: no Slack Web API client and no wrapper tools. Tool schemas, results (Markdown text, not JSON) and rate limits are Slack's.
+- **The default `access` is `all`.** Agents can then read private channels and files, and send or change things, without asking. Set `access` to `"ask-changes"` or `"read-only"` to restrict it; see [Permissions](#permissions).
+- **Tool classes are set by hand.** A tool Slack adds later runs under the namespace rule (allowed at `all`, asks at `ask-changes`, denied at `read-only`) and is not a script method until the plugin classifies it. `/slack-status` names such tools.
+- **Private search needs scopes the default sign-in lacks.** With the default scopes, Slack answers `missing_scope` for it. See the [scope table](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#scopes).
+- **Tested on OpenCode 2.2.3, 2.2.4, 2.2.5 and 2.2.6 only.** Other releases in `>=2.2.3 <2.3.0` run untested.
+- **A script's calls are not recorded in the session.** Slack's audit logs record them.
+- **Names keep the doubled prefix.** A permission action is the tool's full name, such as `slack_slack_search_public`. Renaming it would break saved rules.
+
 ## Links
 
 - [Configuration](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md)
