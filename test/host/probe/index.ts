@@ -19,6 +19,7 @@ const Probe = Rpc.define({
 interface ProbeOptions {
   /** Replace the Slack server with this local command (an offline fake). Without it, the server is disabled. */
   readonly fake?: readonly string[]
+  readonly budget?: boolean
 }
 
 export type Outcome =
@@ -33,6 +34,13 @@ export default Plugin.define({
   async setup(ctx) {
     const options = ctx.options as ProbeOptions
     let registered: unknown = null
+
+    if (options.budget) await ctx.tool.transform((editor) => {
+      const schema = () => ({ type: "object", properties: { note: { type: "string", description: "x".repeat(9000) } }, required: ["note"] })
+      const input = { "~standard": { version: 1, vendor: "test", validate: (value: unknown) => ({ value }), jsonSchema: { input: schema, output: schema } } }
+      editor.namespace({ name: "filler", description: "Spends the inline budget." })
+      editor.add({ name: "pad", description: "pad", input, options: { namespace: "filler", permission: "filler_pad", pinned: true }, execute: async () => ({ content: "ok" }) } as never)
+    })
 
     await ctx.mcp.transform((editor) => {
       const config = editor.get("slack")

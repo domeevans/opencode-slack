@@ -41,7 +41,7 @@ export function tempDirectory(prefix: string, repository = false): string {
   return path
 }
 
-type Client = Pick<OpenCodeClient, "agent" | "command" | "experimental" | "integration" | "mcp" | "permission" | "plugin" | "rpc" | "session" | "skill">
+type Client = Pick<OpenCodeClient, "agent" | "command" | "experimental" | "integration" | "mcp" | "model" | "permission" | "plugin" | "rpc" | "session" | "skill">
 
 const PROJECTS = ["defaults", "rules", "collision", "invalid", "connect", "hosted", "shadowed", "accessAll", "accessAsk", "accessReadOnly"] as const
 export type Project = (typeof PROJECTS)[number]
@@ -207,8 +207,15 @@ const OFFLINE = {
 const toolCalls = (root: Root) => () => (existsSync(root.callLog) ? readFileSync(root.callLog, "utf8").split("\n").filter(Boolean) : [])
 
 /** The public `@opencode/sdk` host in this process, at the version installed as a devDependency. */
-export async function startEmbedded(): Promise<Host> {
+export async function startEmbedded(modelURL?: string): Promise<Host> {
   const root = makeRoot("sdk", REPO)
+  if (modelURL) {
+    const path = join(root.directory("defaults"), "opencode.jsonc")
+    const config = JSON.parse(readFileSync(path, "utf8")) as { plugins: { options: Record<string, unknown> }[]; providers: Record<string, unknown> }
+    config.plugins[1]!.options.budget = true
+    config.providers.lmstudio = { settings: { baseURL: modelURL } }
+    writeFileSync(path, JSON.stringify(config))
+  }
   const saved = { ...process.env }
   const previous = process.cwd()
   // A parent OpenCode session (an agent running this suite) must not leak in. OpenCode reads the XDG roots and
