@@ -24,6 +24,10 @@ This repository builds `@joe-broadhead/opencode-slack`, an unofficial OpenCode p
 - No runtime or peer dependencies, and no install, `prepare` or `prepack` scripts. `@opencode/plugin` (exactly 2.2.3), OpenTUI and Solid are dev dependencies; `opencode.host` states compatibility.
 - `files` is a whitelist. `npm run build` (`scripts/build.ts`) emits exactly two self-contained esbuild bundles, `dist/index.js` and `dist/tui.js`, with shared code inlined and no relative, dynamic or required imports; only `@opencode/plugin`, `@opentui/*`, `solid-js` and `node:*` stay external. The TUI goes through Babel's Solid universal transform first. No `.tsx`, no `.d.ts`, no chunks. `tsc` only typechecks.
 - Releases follow CONTRIBUTING.md: a `vX.Y.Z` tag on `master`, approved in the `release` environment, which CI publishes with npm trusted publishing and provenance.
+- No personal email in anything we publish. Every commit, tag and package is authored and committed as
+  `joe-broadhead <91376460+joe-broadhead@users.noreply.github.com>`. Before committing or tagging, check that
+  `git config user.email` is that address: a fresh clone inherits the machine's global identity, which is not that
+  address. Never commit, tag or publish with a work or personal address, or with a local hostname.
 
 ## Checks
 
