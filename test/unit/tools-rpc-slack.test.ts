@@ -62,7 +62,8 @@ describe("Slack's tools RPC", () => {
 
   test("has no per-account servers, and its next steps name Slack's own command and the location header", () => {
     expect(NEXT_STEPS.ACCOUNT_UNKNOWN).toBeUndefined()
-    for (const code of ["AUTH_REQUIRED", "CONNECTION_FAILED", "NOT_REGISTERED", "TOOL_UNAVAILABLE", "UPSTREAM_ERROR"] as const) expect(NEXT_STEPS[code]).toContain("/slack-status")
+    expect(NEXT_STEPS.AUTH_REQUIRED).toContain("Run /connect and choose Slack")
+    for (const code of ["CONNECTION_FAILED", "NOT_REGISTERED", "TOOL_UNAVAILABLE", "UPSTREAM_ERROR"] as const) expect(NEXT_STEPS[code]).toContain("/slack-status")
     expect(NEXT_STEPS.SESSION_UNKNOWN).toContain("x-opencode-directory")
   })
 })
@@ -178,7 +179,7 @@ describe("the tools RPC in setup", () => {
     const host = await setUp({ servers: { slack: { type: "remote", url: "https://mcp.example.invalid/mcp" } as never } })
     expect(await host.script("slack_search_public", "ses_build", { query: "q" })).toMatchObject({ error: "failed", data: { code: "SERVER_CONFLICT" } })
     expect(host.executed).toEqual([])
-    expect(NEXT_STEPS.SERVER_CONFLICT).toBe("Remove mcp.servers.slack from your OpenCode config.")
+    expect(NEXT_STEPS.SERVER_CONFLICT).toBe("Run /slack-status, then remove mcp.servers.slack from your OpenCode config.")
   })
 
   test("without a Slack app client ID, refuses with /slack-status's CLIENT_ID_MISSING and its next step, in calls and describe", async () => {
