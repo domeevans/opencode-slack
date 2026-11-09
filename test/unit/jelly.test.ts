@@ -56,7 +56,7 @@ describe("the jelly declaration", () => {
       const doc = readFileSync(new URL("../../docs/jelly.md", import.meta.url), "utf8")
       expect(slack?.relay).toEqual({})
       expect(appManifest.oauth_config.redirect_urls).toEqual(["http://localhost:8765/callback"])
-      expect(doc).toContain("https://id.toqanjelly.ai/connect/callback")
+      expect(doc).toContain("https://host.example/connect/callback")
     })
 
     test("the app step is preset by the option that pins the client, so that client is used and no entry is registered", async () => {
