@@ -142,9 +142,9 @@ describe("what the access option restricts", () => {
     }
   })
 
-  test("the Code Mode namespace says every tool is allowed, and that access restricts it", () => {
-    expect(NAMESPACE_DESCRIPTION).toContain("Every tool is allowed by default")
-    expect(NAMESPACE_DESCRIPTION).toContain("access restricts")
+  test("the Code Mode namespace names what each access value does", () => {
+    expect(NAMESPACE_DESCRIPTION).toContain("`ask-changes` asks")
+    expect(NAMESPACE_DESCRIPTION).toContain("`read-only` denies")
   })
 })
 

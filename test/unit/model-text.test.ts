@@ -38,8 +38,14 @@ describe("the model-facing text at access all", () => {
     for (const [claim, pattern] of STALE) expect({ claim, hit: pattern.exec(atAll(text))?.[0] ?? null }).toEqual({ claim, hit: null })
   })
 
-  test("says what the default is, and that access restricts it", () => {
-    expect(NAMESPACE_DESCRIPTION).toContain("Every tool is allowed by default")
-    expect(NAMESPACE_DESCRIPTION).toContain("access restricts")
+  test("says what the default is, and that the access option decides what asks", () => {
+    expect(NAMESPACE_DESCRIPTION).toContain("Every tool runs at the default `access` `all`")
+    expect(NAMESPACE_DESCRIPTION).toContain("`ask-changes` asks")
+    expect(NAMESPACE_DESCRIPTION).toContain("`read-only` denies")
+  })
+
+  test("does not state that every tool is allowed as a fact about every access value", () => {
+    expect(NAMESPACE_DESCRIPTION).not.toMatch(/every tool is allowed/i)
+    expect(NAMESPACE_DESCRIPTION).not.toMatch(/changes are allowed/i)
   })
 })
