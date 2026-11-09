@@ -3,7 +3,7 @@ import { CALLBACK_PORT_EXAMPLE, DEFAULT_REDIRECT_URI, DEFAULT_SCOPES, HOSTED_RED
 /** What the default rules allow. `all` is the default; the other two are how a user restricts the plugin. */
 export type Access = "all" | "ask-changes" | "read-only"
 
-export const ACCESS_VALUES: readonly Access[] = ["all", "ask-changes", "read-only"]
+const ACCESS_VALUES: readonly Access[] = ["all", "ask-changes", "read-only"]
 
 export interface Options {
   /** Pins the Slack app, for example in an organisation's managed config. Otherwise the /connect Slack app client ID entry sets it. */

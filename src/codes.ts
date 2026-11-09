@@ -34,7 +34,7 @@ export const PLUGIN_CODES: readonly PluginCode[] = [
  * The codes the tools RPC shares with every plugin of this family, from the shared module and from OpenCode rather than
  * from this plugin's own code. `docs/scripting.md` documents them beside the two client-ID codes.
  */
-export type RpcCode =
+type RpcCode =
   | "AUTH_REQUIRED"
   | "CANCELLED"
   | "CONNECTING"

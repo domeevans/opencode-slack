@@ -12,7 +12,7 @@ export interface Rule {
 }
 
 /** The tools that only read: they run at every `access` value. */
-export const READ_LIKE: readonly string[] = Object.keys(KNOWN_TOOLS).filter((tool) => KNOWN_TOOLS[tool] === "read")
+const READ_LIKE: readonly string[] = Object.keys(KNOWN_TOOLS).filter((tool) => KNOWN_TOOLS[tool] === "read")
 /** The tools that read private channels or files, and the writes: they ask or are denied once access is restricted. */
 const OTHER_TOOLS: readonly string[] = Object.keys(KNOWN_TOOLS).filter((tool) => KNOWN_TOOLS[tool] !== "read")
 
@@ -41,7 +41,7 @@ const BASE_ALLOW: Rule = { action: "*", resource: "*", effect: "allow" }
  * True when the whole default block appears, in order, anywhere after the agent's first base allow: inserted by the
  * plugin or copied by the user. Other plugins insert their blocks at the same index, so it need not follow directly.
  */
-export function hasDefaultRules(permissions: readonly Rule[], access: Access = "all"): boolean {
+function hasDefaultRules(permissions: readonly Rule[], access: Access = "all"): boolean {
   const base = permissions.findIndex((item) => same(item, BASE_ALLOW))
   if (base === -1) return false
   const block = defaultRules(access)
