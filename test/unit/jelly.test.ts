@@ -20,6 +20,11 @@ const ROOT = new URL("../../", import.meta.url)
 const jelly = readPackage(ROOT).jelly as Declaration & { signIns: SignIn[] }
 
 describe("the jelly declaration", () => {
+  test("declares the flat access option", () => {
+    const settings = (jelly.contributes as { settings: { key: string; type: string }[] }).settings
+    expect(settings.map(({ key, type }) => ({ key, type }))).toEqual([{ key: "access", type: "string" }])
+    expect(parseOptions({ access: "read-only" })).toMatchObject({ ok: true, options: { access: "read-only" } })
+  })
   test("follows the plugin authors' standard, with the effects the plugin's own default rules give", () => {
     expect(declarationProblems(ROOT, { effectOf: effectFromRules(defaultRules()) })).toEqual([])
   })
