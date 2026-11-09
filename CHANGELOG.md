@@ -13,6 +13,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- The Slack skill's first line says how to sign in when the tools are absent: `/connect`, or on Jelly `jelly_connection_request`.
+
 - **Every tool is allowed by default.** The generated block allows every Slack tool and the `slack_*` namespace, so a tool Slack adds later runs at once and a script can call everything. The Jelly declaration's tools are all `allow`. Restrict it with `access`, with an agent's own rules, or with a rule per tool; the README's Permissions section, `docs/configuration.md`, `SECURITY.md` and the `slack-search` skill say what an all-allow default means and how to restrict it.
 - The `access` option, `"all"` (the default), `"ask-changes"` and `"read-only"` (there is no earlier option to map): it generates the default rules from the tool classes, so `"ask-changes"` lets the reads run and asks for the private-channel search, file reads, writes, sends and new tools, and `"read-only"` denies them. Status and the `/slack` dialog show what it allows.
 - `docs/scripting.md` carries the family's envelope, location section, unload note, result wording and refusal table, word for word.

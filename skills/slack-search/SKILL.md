@@ -3,6 +3,8 @@ name: slack-search
 description: Use when the user wants to find, read, summarise or cite anything in their Slack (messages, threads, channels, people, canvases, lists or files), asks what was said or decided in Slack, wants to post, reply, draft or schedule a Slack message, or wants a script or cron job that reads Slack. Covers Slack's own tools in OpenCode, private-content consent, permalinks, and scripts through OpenCode's tools RPC instead of a Slack token or the Web API.
 ---
 
+If Slack's tools are absent, run `/connect` and choose Slack app client ID if needed, then Slack, or on Jelly call jelly_connection_request.
+
 # Slack
 
 Find, then read, then cite. The tools are Slack's own, in Code Mode's `slack` namespace: call `tools.slack.<tool>({ … })` inside `execute`. Look up only the tool you need, such as `search({ namespace: "slack", query: "slack_read_thread", limit: 3 })`, because listing the whole namespace returns tens of KB. Without Code Mode, the same tools are direct tools named `slack_<tool>`.
