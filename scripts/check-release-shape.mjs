@@ -5,7 +5,8 @@
 //   node scripts/check-release-shape.mjs [--tag v0.0.0] [--branch master] [--allow <path>]...
 //     [--verify git --allowed-signers <file> | --verify github-api]
 //     [--rebuilt <dir>]  a directory whose dist/ is a fresh build of the tag's parent: compared byte for byte
-//     [--notes <file>]   writes the release notes: the CHANGELOG section for the version, then the README's Known limits
+//     [--notes <file>]   writes the release notes: the CHANGELOG's 0.0.0 section up to the next ## heading, then the
+//                        README's Known limits. The CHANGELOG must be in the release shape (scripts/changelog.mjs).
 //
 // Checks, in order: the tag is annotated and signed by the owner; its name is v<version> and the version is 0.0.0;
 // its commit has one parent, which is on the branch; the commit and tag identities are the GitHub noreply domain; the
@@ -17,6 +18,7 @@ import { join, relative } from "node:path"
 import { fileURLToPath } from "node:url"
 import { allowedPath, LIFECYCLE_SCRIPTS, NOREPLY_DOMAIN, RELEASE_VERSION, TAG } from "./release-commit.mjs"
 import { MANIFEST_PATH, manifestProblems } from "./native-manifest.mjs"
+import { changelogProblems, releaseNotes } from "./changelog.mjs"
 
 function parseArgs(argv) {
   const options = { tag: TAG, branch: "master", allow: [], verify: "git", allowedSigners: undefined, rebuilt: undefined, notes: undefined }
@@ -194,8 +196,14 @@ function listFiles(dir) {
 /** The CHANGELOG section for the version, then the README's Known limits (D3), written to the file. */
 function writeNotes(target, file, fail, ok) {
   const changelog = gitBuffer(["show", `${target}:CHANGELOG.md`])?.toString("utf8") ?? ""
-  const section = sectionOf(changelog, `## [${RELEASE_VERSION}]`)
-  if (!section) return fail(`CHANGELOG.md has no "## [${RELEASE_VERSION}]" section`)
+  const shape = changelogProblems(changelog)
+  if (shape.length) return fail(`CHANGELOG.md is not in the release shape: ${shape.join("; ")}`)
+  let section
+  try {
+    section = releaseNotes(changelog)
+  } catch (error) {
+    return fail(error.message)
+  }
   const readme = gitBuffer(["show", `${target}:README.md`])?.toString("utf8") ?? ""
   const limits = sectionOf(readme, "## Known limits")
   writeFileSync(file, [section.trim(), ...(limits ? ["", "### Known limits", "", limits.trim().replace(/^## Known limits\s*/, "")] : [])].join("\n") + "\n")

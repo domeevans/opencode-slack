@@ -3,6 +3,7 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.0.0] - 2026-11-10
+<!-- kit-release: the GitHub release v0.0.0 -->
 
 ### Added
 
@@ -15,6 +16,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - The Slack skill's first line says how to sign in when the tools are absent: `/connect`, or on Jelly `jelly_connection_request`.
 - `docs/scripting.md` says a script's session needs the project as its `location`; without one, each call fails `Agent not found`.
+- `SKILLS_INVALID` says to reinstall the plugin from its tag: `opencode plugin remove` with the installed spec, then `opencode plugin add` with it. `opencode plugin update` does not take a Git install.
 - `slack_events_list` runs without a prompt at every `access` value, because it is a read and Memory's collector runs it unattended. Its six error codes are in the Troubleshooting table.
 - **Every tool is allowed by default.** The generated block allows every Slack tool and the `slack_*` namespace, so a tool Slack adds later runs at once and a script can call everything. The Jelly declaration's tools are all `allow`. Restrict it with `access`, with an agent's own rules, or with a rule per tool; the README's Permissions section, `docs/configuration.md`, `SECURITY.md` and the `slack-search` skill say what an all-allow default means and how to restrict it.
 - The `access` option, `"all"` (the default), `"ask-changes"` and `"read-only"` (there is no earlier option to map): it generates the default rules from the tool classes, so `"ask-changes"` lets the reads run and asks for the private-channel search, file reads, writes, sends and new tools, and `"read-only"` denies them. Status and the `/slack` dialog show what it allows.

@@ -437,7 +437,7 @@ Every error the plugin raises reads `CODE: What happened. Next step: What to do.
 | none: a shadowed skill | connected | Move or rename the skill at `<path>`, so that this plugin's slack-search skill loads, then run opencode reload. |
 | none: agents without default rules | connected | Put the default rules shown by /slack-status first in each listed agent's own permissions, in opencode.json or the agent's Markdown file, followed by your top-level rules for Slack tools. |
 | `STATUS_UNAVAILABLE` | none: status itself failed | Run /slack-status again in a moment (in the dialog: press r to retry). |
-| `SKILLS_INVALID` | none: the plugin does not load | Run opencode plugin update @joe-broadhead/opencode-slack, then opencode reload. A bundled skill is missing or has invalid frontmatter. |
+| `SKILLS_INVALID` | none: the plugin does not load | Reinstall the plugin: opencode plugin remove github:joe-broadhead/opencode-slack#v0.0.0, then opencode plugin add github:joe-broadhead/opencode-slack#v0.0.0, then opencode reload. A bundled skill is missing or has invalid frontmatter. |
 | `INPUT_INVALID` | none: `slack_events_list` | Pass since, cursor, limit, account or source as events_list's schema describes them. |
 | `SOURCE_UNKNOWN` | none: `slack_events_list` | Leave "source" out, or pass "slack". |
 | `CURSOR_INVALID` | none: `slack_events_list` | Call events_list without a cursor, with since, to start again. |

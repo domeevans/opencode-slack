@@ -17,7 +17,7 @@ opencode plugin add github:joe-broadhead/opencode-slack#v0.0.0
 
 Run `opencode reload`, or restart OpenCode. Then run `/slack-status`: it shows `not configured` until you give OpenCode your Slack app's client ID (see [Sign in](#sign-in)).
 
-The install takes the GitHub release tag. Its commit carries the built `dist/`, so the install runs no build. A new release is a new tag: install it with its own `#v<version>` spec.
+The install takes the GitHub release tag. Its commit carries the built `dist/`, so the install runs no build. To update, remove the spec you installed with `opencode plugin remove`, add the new tag's spec with `opencode plugin add`, then run `opencode reload`.
 
 ## Sign in
 
@@ -204,7 +204,7 @@ Run `/slack-status` (or `/slack` in the TUI) first. Its `Connection` row shows a
 | `connected` | none | A skill in your own or the project's skill folders has the id `slack-search`, so OpenCode loads it instead of the plugin's. The `Skills` row names its file. | Move or rename that skill, then run `opencode reload`. |
 | `connected` | none | Ready. The next step reads `Nothing to do.` | If status names agents without default rules, put the default rules first in their own permissions (see above). |
 | — | `STATUS_UNAVAILABLE` | Status itself could not be read. | Run `/slack-status` again in a moment. |
-| — | `SKILLS_INVALID` | A bundled skill is missing or has invalid frontmatter, so the plugin does not load. | Run `opencode plugin update @joe-broadhead/opencode-slack`, then `opencode reload`. |
+| — | `SKILLS_INVALID` | A bundled skill is missing or has invalid frontmatter, so the plugin does not load. | Reinstall the plugin: `opencode plugin remove github:joe-broadhead/opencode-slack#v0.0.0`, then `opencode plugin add github:joe-broadhead/opencode-slack#v0.0.0`, then `opencode reload`. |
 | — | `INPUT_INVALID` | The `events_list` input is invalid; the message names the problems. | Pass `since`, `cursor`, `limit`, `account` or `source` as the tool's schema describes them. |
 | — | `SOURCE_UNKNOWN` | This plugin lists only the source `slack`. | Leave `source` out, or pass `slack`. |
 | — | `CURSOR_INVALID` | The cursor was not issued by `events_list` for this Slack workspace and sign-in. | Call `events_list` without a cursor, with `since`, to start again. |
@@ -214,7 +214,7 @@ Run `/slack-status` (or `/slack` in the TUI) first. Its `Connection` row shows a
 | — | `UPSTREAM_ERROR` | Slack refused a read `events_list` makes, such as a missing scope or a channel you cannot read. | Check that the channel id in `events.channels` is one you can read, then call `events_list` again with the same cursor. |
 | — | `TOOL_UNAVAILABLE` | OpenCode does not list a read `events_list` needs, or `slack` is your own server. | Wait a few seconds, then run `/slack-status` and follow its next step. |
 
-If status itself cannot be read, `/slack-status` says `STATUS_UNAVAILABLE`; run it again in a moment. If a bundled skill is missing or broken, OpenCode reports `SKILLS_INVALID` when it loads the plugin; run `opencode plugin update @joe-broadhead/opencode-slack`, then `opencode reload`.
+If status itself cannot be read, `/slack-status` says `STATUS_UNAVAILABLE`; run it again in a moment. If a bundled skill is missing or broken, OpenCode reports `SKILLS_INVALID` when it loads the plugin; reinstall it from its tag, as the Troubleshooting table says.
 
 A script's errors from the tools RPC have their own codes, listed in [Scripting](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/scripting.md#errors).
 

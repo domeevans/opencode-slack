@@ -1,10 +1,17 @@
 import { readFile } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 import { Skill } from "@opencode/plugin"
+import { VERSION } from "./version.js"
 
 type SkillInfo = typeof Skill.Info.Type
 
 const SKILLS = ["slack-search"] as const
+
+/**
+ * The one next step for a broken install: reinstall this release's tag. `plugin update` takes no git install, so the
+ * plugin is removed by its installed spec and added again.
+ */
+const REINSTALL = `Reinstall the plugin: run opencode plugin remove github:joe-broadhead/opencode-slack#v${VERSION}, then opencode plugin add github:joe-broadhead/opencode-slack#v${VERSION}, then opencode reload.`
 
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/
 
@@ -34,10 +41,10 @@ export async function loadSkills(root = new URL("../skills/", import.meta.url)):
   for (const id of SKILLS) {
     const path = fileURLToPath(new URL(`${id}/SKILL.md`, root))
     const text = await readFile(path, "utf8").catch(() => {
-      throw new Error(`SKILLS_INVALID: Bundled skill ${id} is missing. Next step: Run opencode plugin update @joe-broadhead/opencode-slack, then opencode reload.`)
+      throw new Error(`SKILLS_INVALID: Bundled skill ${id} is missing. Next step: ${REINSTALL}`)
     })
     const skill = parseSkill(id, path, text)
-    if (skill === undefined) throw new Error(`SKILLS_INVALID: Bundled skill ${id} has invalid frontmatter. Next step: Run opencode plugin update @joe-broadhead/opencode-slack, then opencode reload.`)
+    if (skill === undefined) throw new Error(`SKILLS_INVALID: Bundled skill ${id} has invalid frontmatter. Next step: ${REINSTALL}`)
     skills.push(skill)
   }
   return skills

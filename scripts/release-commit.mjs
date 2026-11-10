@@ -155,9 +155,11 @@ function main() {
     manifestText = candidate.text
   }
 
-  // The build the release ships. A clean `npm ci` with lifecycle scripts off, then the same build the check runs.
+  // The build the release ships: the repository's `build` script, after a clean `npm ci` with lifecycle scripts off. The
+  // release commit then drops `build` with the other lifecycle scripts (LIFECYCLE_SCRIPTS), so the install builds nothing.
+  if (!pkg.scripts?.build) die('package.json has no "build" script: the release builds with npm run build')
   run("npm", ["ci", "--ignore-scripts"])
-  run("node", ["scripts/build.mjs"])
+  run("npm", ["run", "build"])
   if (git(["status", "--porcelain", "--untracked-files=all"])) die("the build changed tracked files; the release commit would not be the build")
 
   // dist/ is git-ignored on master, so the build's files are listed as ignored, untracked files.

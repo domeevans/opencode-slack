@@ -3,8 +3,10 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { join } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { loadSkills, parseSkill, shadowedSkills } from "../../src/skills.js"
+import { VERSION } from "../../src/version.js"
 
 const REPO = fileURLToPath(new URL("../..", import.meta.url))
+const REINSTALL = `Reinstall the plugin: run opencode plugin remove github:joe-broadhead/opencode-slack#v${VERSION}, then opencode plugin add github:joe-broadhead/opencode-slack#v${VERSION}, then opencode reload.`
 const SEARCH = readFileSync(join(REPO, "skills", "slack-search", "SKILL.md"), "utf8")
 const crlf = (text: string) => text.replace(/\r?\n/g, "\r\n")
 
@@ -86,12 +88,12 @@ describe("loadSkills", () => {
   })
 
   test("a missing skill means a broken install", async () => {
-    await expect(loadSkills(folder({}))).rejects.toThrow("SKILLS_INVALID: Bundled skill slack-search is missing. Next step: Run opencode plugin update @joe-broadhead/opencode-slack, then opencode reload.")
+    await expect(loadSkills(folder({}))).rejects.toThrow(`SKILLS_INVALID: Bundled skill slack-search is missing. Next step: ${REINSTALL}`)
   })
 
   test("bad frontmatter names the skill and the fix", async () => {
     await expect(loadSkills(folder({ "slack-search": "# no frontmatter\n" }))).rejects.toThrow(
-      "SKILLS_INVALID: Bundled skill slack-search has invalid frontmatter. Next step: Run opencode plugin update @joe-broadhead/opencode-slack, then opencode reload.",
+      `SKILLS_INVALID: Bundled skill slack-search has invalid frontmatter. Next step: ${REINSTALL}`,
     )
   })
 })
