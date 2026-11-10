@@ -18,8 +18,8 @@ concurrency:
 
 env:
   # Set when the kit is copied into a plugin: the plugin's status RPC id and its skill id (the stock check reads them).
-  PLUGIN_RPC: slack.workspace
-  PLUGIN_SKILL: slack-search
+  PLUGIN_RPC: jobs.scheduler
+  PLUGIN_SKILL: jobs
 
 jobs:
   # The OpenCode hosts this release is tested on come from the plugin's own TESTED_HOSTS list, read here, so the matrix
@@ -126,12 +126,12 @@ jobs:
         with:
           bun-version: 1.4.4 # the Bun that every stock OpenCode host in TESTED_HOSTS bundles
           no-cache: true
-      - name: Pack the tag and run the pack test against that exact tarball
+      - name: Pack the tag and run the repository's own pack stage against that exact tarball
         run: |
           npm ci --ignore-scripts
           mkdir -p "$RUNNER_TEMP/release"
           npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/release"
-          PACK_TARBALL="$(ls "$RUNNER_TEMP"/release/*.tgz)" node scripts/check.mjs pack
+          node scripts/release-pack.mjs --tarball "$(ls "$RUNNER_TEMP"/release/*.tgz)"
       # No second gate here, on purpose: the download runs inside the approved release job, and every file is checked
       # against the manifest's sizes and sha256s and must carry a verified attestation before it is attached.
       # Native plugins only (a repository with no manifest/native.json skips this step). The run is the one the manifest
@@ -147,17 +147,16 @@ jobs:
           cd "$RUNNER_TEMP/release"
           list="$RUNNER_TEMP/sums-list.txt"
           find . -type f ! -name SHA256SUMS | sed 's#^\./##' | sort > "$list"
-          while IFS= read -r file; do sha256sum "$file"; done < "$list" > "$RUNNER_TEMP/SHA256SUMS"
+          # Each line names the asset (the file's base name, which is how the Release stores it), not its folder.
+          while IFS= read -r file; do sha256sum "$file" | sed "s#  .*/#  #"; done < "$list" > "$RUNNER_TEMP/SHA256SUMS"
           mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
           cat SHA256SUMS
           node "$GITHUB_WORKSPACE/scripts/check-release-shape.mjs" --tag "$GITHUB_REF_NAME" --branch origin/master --verify github-api --notes "$RUNNER_TEMP/notes.md"
         env:
           GH_TOKEN: ${{ github.token }}
-      - name: Create the GitHub Release on the tag
-        run: |
-          assets="$(cd "$RUNNER_TEMP/release" && find . -type f ! -name SHA256SUMS | sed 's#^\./##' | sort)"
-          set --
-          for file in $assets; do set -- "$@" "$RUNNER_TEMP/release/$file"; done
-          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md" "$@" "$RUNNER_TEMP/release/SHA256SUMS"
+      # Creates the Release, or, on a re-run, adds the kit's missing files. It never deletes or replaces an asset, and it
+      # leaves assets it does not know (attached later by hand) alone.
+      - name: Create the GitHub Release on the tag, or add its missing kit files
+        run: node scripts/publish-release.mjs --tag "$GITHUB_REF_NAME" --dir "$RUNNER_TEMP/release" --notes "$RUNNER_TEMP/notes.md"
         env:
           GH_TOKEN: ${{ github.token }}
