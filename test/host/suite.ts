@@ -216,11 +216,12 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         sessions.unconfigured = await create({ agent: "build" }, "connect")
       }, 60_000)
 
-      test("describes every known tool with its class and live schema; no unknown tool is a method", async () => {
+      test("describes every known tool with its class and live schema, and events_list; no unknown tool is a method", async () => {
         const { value } = await script("describe", {})
         expect(value.id).toBe(TOOLS_RPC_ID)
-        expect(value.methods.map((method: { name: string }) => method.name)).toEqual(METHODS.map((method) => method.name))
-        for (const method of value.methods) {
+        expect(value.methods.map((method: { name: string }) => method.name)).toEqual([...METHODS.map((method) => method.name), "events_list"])
+        expect(value.methods.at(-1)).toMatchObject({ name: "events_list", kind: "plugin", class: "read", action: "slack_events_list", available: true })
+        for (const method of value.methods.filter((item: { kind: string }) => item.kind === "mcp")) {
           const expected = METHODS.find((entry) => entry.name === method.name)!
           expect({ name: method.name, tool: method.tool, kind: method.kind, class: method.class, action: method.action, available: method.available, input: method.input })
             .toEqual({ name: method.name, tool: `slack_${method.name}`, kind: "mcp", class: expected.class, action: `slack_${method.name}`, available: true, input: fakeInput(method.name) })
@@ -290,7 +291,7 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
 
       test("describe with a session reports each method's permission; without one it omits it", async () => {
         const { value } = await script("describe", { sessionID: sessions.build })
-        const expected = Object.fromEntries(METHODS.map((method) => [method.name, "allow"]))
+        const expected = Object.fromEntries([...METHODS.map((method) => [method.name, "allow"]), ["events_list", "allow"]])
         expect(Object.fromEntries(value.methods.map((method: { name: string; permission: string }) => [method.name, method.permission]))).toEqual(expected)
         const plain = (await script("describe", {})).value
         expect(plain.methods.every((method: object) => !Object.hasOwn(method, "permission"))).toBe(true)
