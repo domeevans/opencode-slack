@@ -6,18 +6,18 @@
 //   scripts/check-icons.mjs; do not edit the copy. check-icons-copy.mjs in the
 //   kit verifies a copy is byte-identical.
 //
-// The sanitizer below is hey-jelly's, copied from
+// The sanitizer below is Jelly's, copied from
 //   protocol/contracts/src/plugin-icon.ts  (function cleanPluginIcon, lines
 //   22-160, and the ELEMENTS / ATTRIBUTES sets and the TAG, ATTRIBUTE, LABEL
 //   and safeValue helpers it depends on), with the conformance vectors of
 //   protocol/contracts/src/plugin-icon.test.ts (lines 12-68).
 // Source: jelly's plugin contract (protocol/contracts), branch origin/master,
 //   read 2026-11-06. That is the single definition of a
-//   clean plugin icon: the one hey-jelly keeps at review, at install and at
+//   clean plugin icon: the one Jelly keeps at review, at install and at
 //   render. This copy is byte-identical except for the TypeScript annotations,
 //   which plain JavaScript cannot carry.
 //
-// Shared block SHA-256: ae0c00be97103bedd78f916577417ccd1ea27c815416b72739a43b88803b52bf
+// Shared block SHA-256: 34f125900257d27f159ffb514a6ddfff9627b4547d0743572be8433598fe22a1
 //   The block is everything between the two "SHARED" markers below. It is
 //   checked against this constant on every run, so a hand-edited copy fails
 //   before it can pass a bad icon.
@@ -172,7 +172,7 @@ function cleanPluginIcon(text) {
 
 /**
  * The conformance vectors of plugin-icon.test.ts, as a self-test: a copy that
- * has drifted from hey-jelly's semantics fails here rather than quietly
+ * has drifted from Jelly's semantics fails here rather than quietly
  * accepting an icon Jelly would drop.
  */
 function sanitizerProblems() {
@@ -505,7 +505,7 @@ if (svgText !== null) {
   const cleaned = cleanPluginIcon(svgText)
   if (cleaned === null) {
     bad(
-      `${ICON_PATH}: hey-jelly's cleanPluginIcon refuses the whole file — ${diagnoseIcon(svgText) ?? "no single cause could be named"}. ` +
+      `${ICON_PATH}: Jelly's cleanPluginIcon refuses the whole file — ${diagnoseIcon(svgText) ?? "no single cause could be named"}. ` +
         "Jelly would draw a monogram instead of this mark.",
     )
   } else if (cleaned !== svgText) {

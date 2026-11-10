@@ -113,6 +113,7 @@ const INTERNAL = [
   { name: "owner decision", pattern: /owner'?s? (decision|ruling)/i, example: "the owner's decision" },
   { name: "the lead", pattern: /\bthe lead\b/i, example: "the lead ruled" },
   { name: "a lane name", pattern: /\blane\b/i, example: "the slack lane" },
+  { name: "a private brand or host", pattern: /\b(prosus|toqan)\b/i, example: "https://id.toqan.example/callback" },
   { name: "a tracker marker", pattern: /hey-jelly #/i, example: "hey-jelly #12" },
 ]
 
