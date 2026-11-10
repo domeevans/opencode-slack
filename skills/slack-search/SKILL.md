@@ -79,7 +79,7 @@ A job that runs without you reads Slack through OpenCode's tools RPC. OpenCode h
 
 ```sh
 # Once: a session whose agent the script runs as. It prints {"data":{"id":"ses_…",…}}: keep data.id.
-opencode api post /api/session -d '{"title":"incident log","agent":"build"}'
+opencode api post /api/session -d '{"title":"incident log","agent":"build","location":{"directory":"/path/to/project"}}'
 # Each run: one method per read tool, with the tool's own input.
 opencode api post /api/rpc/slack.workspace.tools/slack_search_public \
   -d '{"input":{"sessionID":"ses_…","input":{"query":"incident on:2026-11-04","limit":20}}}'
