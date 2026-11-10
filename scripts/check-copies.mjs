@@ -11,7 +11,7 @@ const BEGIN = "// >>> PLUGIN-SPECIFIC >>>"
 const END = "// <<< PLUGIN-SPECIFIC <<<"
 
 const COPIES = [
-  { path: "src/host/tools-rpc.ts", optional: true, sha256: "57377eb3844ff89a4a55fbf6d83f8ab172d4e403b368c116ea4751850fc840fd", part: sharedPart },
+  { path: "src/host/tools-rpc.ts", optional: true, sha256: "15d82caa53aaae7ad9efb88dddb97056d3895c4dbf49b8efbb85b743871b2a6d", part: sharedPart },
   { path: "test/support/jelly-kit.ts", optional: false, sha256: "ab599abcf041044c77e7938c3d9a081e00072487a7ec20b654d86c8230951190", part: (text) => text },
   { path: "src/host/events-list.ts", optional: true, sha256: "9d72fc8dd88fa88b22bf74eb078ad05afcaebff1b324976c42250c77d1ea605e", part: (text) => text },
 ]
