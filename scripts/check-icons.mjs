@@ -2,7 +2,7 @@
 // check-icons.mjs -- the icon contract for the @joe-broadhead OpenCode plugins.
 //
 // Contract: CONTRACT.md revision 1 (2026-11-06), in the family's icon kit
-//   (~/opencode-release/icons). Copy this file verbatim into a plugin as
+//   (the family's shared icon set). Copy this file verbatim into a plugin as
 //   scripts/check-icons.mjs; do not edit the copy. check-icons-copy.mjs in the
 //   kit verifies a copy is byte-identical.
 //
@@ -11,8 +11,8 @@
 //   22-160, and the ELEMENTS / ATTRIBUTES sets and the TAG, ATTRIBUTE, LABEL
 //   and safeValue helpers it depends on), with the conformance vectors of
 //   protocol/contracts/src/plugin-icon.test.ts (lines 12-68).
-// Source checkout: ~/opencode-release/polish/scratch/contracts-origin-master,
-//   branch origin/master, read 2026-11-06. That is the single definition of a
+// Source: jelly's plugin contract (protocol/contracts), branch origin/master,
+//   read 2026-11-06. That is the single definition of a
 //   clean plugin icon: the one hey-jelly keeps at review, at install and at
 //   render. This copy is byte-identical except for the TypeScript annotations,
 //   which plain JavaScript cannot carry.
