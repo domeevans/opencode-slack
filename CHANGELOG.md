@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.0.0] - 2026-11-10
+
 ### Added
 
 - `opencode.icons` and `opencode.vendor`, with `assets/icon.svg`, `icon-128.png` and `icon-256.png` from the family icon kit, the three `exports` and `files` entries, and the `icons` stage of `npm run check`.
@@ -134,7 +136,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - The `oauth.redirect_uri` errors say which rule an `http:` URL broke, and their next step names both a loopback and a hosted example. The `Callback` status row says to register the URL in the app's Redirect URLs.
 
-## [0.0.0] - 2026-11-01
+## [0.0.0-superseded] - 2026-11-01
 
 ### Added
 

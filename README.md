@@ -12,12 +12,12 @@ Unofficial; not affiliated with Slack. Slack is a trademark of Slack Technologie
 ## Install
 
 ```sh
-opencode plugin add @joe-broadhead/opencode-slack
+opencode plugin add github:joe-broadhead/opencode-slack#v0.0.0
 ```
 
 Run `opencode reload`, or restart OpenCode. Then run `/slack-status`: it shows `not configured` until you give OpenCode your Slack app's client ID (see [Sign in](#sign-in)).
 
-**Update** with `opencode plugin update @joe-broadhead/opencode-slack`, then run `opencode reload`. An entry pinned to a version, such as `@joe-broadhead/opencode-slack@0.0.2`, does not update: remove the `@version` from its `plugins` entry first.
+The install takes the GitHub release tag. Its commit carries the built `dist/`, so the install runs no build. A new release is a new tag: install it with its own `#v<version>` spec.
 
 ## Sign in
 
@@ -245,7 +245,7 @@ Sign out while the plugin is still installed: once it is removed, OpenCode no lo
 1. Sign out of Slack: `opencode mcp logout slack`. If it answers "MCP server not found" right after OpenCode starts, wait a few seconds and run it again.
 2. If you saved a client ID in `/connect`, remove it: `opencode auth logout slack-app`, and choose the **Slack app client ID** account. Without a terminal, name it: `opencode auth logout slack-app "Slack app client ID"`. An entry saved by an earlier release is named "Slack app".
 3. Check: `opencode auth list` lists neither **Slack** nor **Slack app client ID**.
-4. Remove the plugin: `opencode plugin remove @joe-broadhead/opencode-slack`, then `opencode reload`. `opencode mcp list` no longer lists `slack`.
+4. Remove the plugin: `opencode plugin remove github:joe-broadhead/opencode-slack#v0.0.0` (the spec you installed), then `opencode reload`. `opencode mcp list` no longer lists `slack`.
 5. Remove any Slack rules you copied into your agents' own `permissions`.
 
 ## Known limits

@@ -39,7 +39,17 @@ OPENCODE_BIN_2_2_3=/path/to/2.2.3/opencode OPENCODE_BIN_2_2_4=/path/to/2.2.4/ope
 
 ## Releasing
 
-1. Set the version in `package.json` and `package-lock.json`, and date its `CHANGELOG.md` section.
-2. Push a `vX.Y.Z` tag on `master`.
-3. Approve the run in the `release` environment.
-4. `release.yml` refuses a private package or a tag that differs from the version, runs `npm run check`, packs once, runs the package test against that tarball, and publishes it with npm trusted publishing and provenance. A version already on npm is skipped.
+Every plugin releases as `v0.0.0`, and it installs from that GitHub tag. The release is one commit on top of a `master`
+head that CI passed, and the tag points at it.
+
+1. Set `version` to `0.0.0` in `package.json`, date the `## [0.0.0]` entry in `CHANGELOG.md`, then run `npm run check`.
+2. Push that commit to `master`, and wait for CI to pass on it.
+3. In a clean checkout of `master` at that commit, run `node scripts/release-commit.mjs --ci-sha <its full sha>`. It builds
+   `dist/`, removes the lifecycle scripts, and creates the signed commit and the signed annotated tag `v0.0.0`. It never
+   pushes; `--dry-run` shows the change first.
+4. Push the tag only: `git push origin v0.0.0`.
+5. Approve the run in the `release` environment. The release workflow checks the tag and its commit, installs the tag on
+   each stock OpenCode host (2.2.3 to 2.2.6), packs it, and creates the GitHub Release with the notes, the tarball and
+   `SHA256SUMS`.
+
+A tag that already exists stops step 3. Delete the old tag and its Release first, then start again.

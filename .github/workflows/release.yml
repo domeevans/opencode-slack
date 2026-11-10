@@ -1,7 +1,9 @@
-# Publishes a v* tag to npm after the release environment is approved. It refuses a private package or a tag
-# that differs from the version, checks the tagged tree, packs it once, tests that tarball, and publishes it with
-# npm trusted publishing (OIDC) and provenance. A version already on npm is skipped, so a rerun is safe.
 name: release
+
+# Creates the GitHub Release for a v* tag. The tag points at a release commit that the release kit built on master
+# (scripts/release-commit.mjs); this run verifies that commit and then publishes it. Nothing here touches npm.
+# One approval per release: only the `release` job uses the `release` environment, so the owner approves once, after
+# every verify job has passed. The verify jobs run on the tag push with a read-only token and no secrets.
 
 on:
   push:
@@ -11,95 +13,123 @@ permissions:
   contents: read
 
 concurrency:
-  group: release
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  # Set when the kit is copied into a plugin: the plugin's status RPC id and its skill id (the stock check reads them).
+  PLUGIN_RPC: slack.workspace
+  PLUGIN_SKILL: slack-search
+
 jobs:
-  publish:
+  verify:
+    name: verify the tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read # the native run's facts, for a native plugin
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: "Check the tag (annotated, signed by the owner, v0.0.0, one parent on master, the allowed change, no lifecycle scripts, and the native manifest when there is one)"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-release-shape.mjs --tag "$GITHUB_REF_NAME" --branch origin/master --verify github-api --notes "$RUNNER_TEMP/notes.md"
+      - name: Rebuild the tag's parent and compare dist/ byte for byte
+        run: |
+          parent="$(git rev-parse "$GITHUB_REF_NAME^")"
+          git worktree add --detach "$RUNNER_TEMP/parent" "$parent"
+          (cd "$RUNNER_TEMP/parent" && npm ci --ignore-scripts && node scripts/build.mjs)
+          node scripts/check-release-shape.mjs --tag "$GITHUB_REF_NAME" --branch origin/master --verify github-api --rebuilt "$RUNNER_TEMP/parent"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  hosts:
+    name: stock OpenCode ${{ matrix.host }}
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ["2.2.3", "2.2.4", "2.2.5", "2.2.6"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Install the tag as a Git plugin on the stock host, in an isolated HOME, and check it loads
+        run: sh scripts/check-release-plugin-add.sh "${{ matrix.host }}" "$GITHUB_WORKSPACE" "$GITHUB_REF_NAME" "$RUNNER_TEMP/host" "$PLUGIN_SKILL" "$PLUGIN_RPC"
+
+  release:
+    name: create the GitHub Release
+    needs: [verify, hosts]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: release
     permissions:
-      contents: read
-      id-token: write # trusted publishing and provenance
+      contents: write # the Release
+      actions: read # the native run's artifacts
+      attestations: read # the attestation of each native file
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
+          fetch-tags: true
           persist-credentials: false
-      # First, before anything is installed or built. `npm publish --dry-run` does not refuse a private
-      # package, so the workflow checks package.json itself.
-      - name: Refuse a private package or a tag that differs from the version
-        run: |
-          node -e '
-            const pkg = require("./package.json")
-            if (pkg.private !== undefined && pkg.private !== false) {
-              console.error("::error::package.json has \"private\": " + JSON.stringify(pkg.private) + ", so nothing was published.")
-              process.exit(1)
-            }
-            if (process.env.GITHUB_REF_NAME !== "v" + pkg.version) {
-              console.error("::error::The tag " + process.env.GITHUB_REF_NAME + " does not match the package version " + pkg.version + ".")
-              process.exit(1)
-            }
-          '
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24 # the embedded host in the tests needs Node 24 or later
-          registry-url: https://registry.npmjs.org
-          package-manager-cache: false # no caches in release builds
+          node-version: 24
+          package-manager-cache: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4 # the Bun inside stock OpenCode 2.2.3, 2.2.4, 2.2.5 and 2.2.6
           no-cache: true
-      - run: npm ci --ignore-scripts
-      - run: npm run check
-      # npm run check built dist/; pack it once for publishing, and test and publish that file.
-      - name: Pack the checked tree
-        id: pack
+      - name: Pack the tag and run the pack test against that exact tarball
         run: |
-          mkdir "$RUNNER_TEMP/package"
-          npm pack --ignore-scripts --json --pack-destination "$RUNNER_TEMP/package" > "$RUNNER_TEMP/pack.json"
-          name=$(node -e '
-            const [packed] = require(process.argv[1])
-            if (!packed.files.some((file) => file.path === "dist/index.js")) {
-              console.error("::error::The tarball has no dist/index.js.")
-              process.exit(1)
-            }
-            console.log(packed.filename)
-          ' "$RUNNER_TEMP/pack.json")
-          tarball="$RUNNER_TEMP/package/$name"
-          sha256sum "$tarball"
-          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
-      - name: Run the package test against that exact tarball
+          npm ci --ignore-scripts
+          mkdir -p "$RUNNER_TEMP/release"
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/release"
+          PACK_TARBALL="$(ls "$RUNNER_TEMP"/release/*.tgz)" node scripts/check.mjs pack
+      # No second gate here, on purpose: the download runs inside the approved release job, and every file is checked
+      # against the manifest's sizes and sha256s and must carry a verified attestation before it is attached.
+      # Native plugins only (a repository with no manifest/native.json skips this step). The run is the one the manifest
+      # pins: its artifacts must match the manifest's sizes and sha256, the gzips must hold the pinned executables, and
+      # each file must carry a verified attestation. The release job builds nothing (NATIVE-DESIGN §4).
+      - name: Verify and stage the pinned native binaries and licence files
+        if: hashFiles('manifest/native.json') != ''
+        run: node scripts/attach-native.mjs --out "$RUNNER_TEMP/release/native"
         env:
-          SLACK_PACK_TARBALL: ${{ steps.pack.outputs.tarball }}
-        run: npm run test:pack
-      - name: Require npm 11.5.1 or later for trusted publishing
+          GH_TOKEN: ${{ github.token }}
+      - name: Write SHA256SUMS and the release notes
         run: |
-          node -e '
-            const [major, minor, patch] = process.argv[1].split(".").map(Number)
-            if (major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) {
-              console.error("::error::npm " + process.argv[1] + " cannot use trusted publishing. It needs npm 11.5.1 or later.")
-              process.exit(1)
-            }
-          ' "$(npm --version)"
-      - name: Publish the tarball with provenance
+          cd "$RUNNER_TEMP/release"
+          list="$RUNNER_TEMP/sums-list.txt"
+          find . -type f ! -name SHA256SUMS | sed 's#^\./##' | sort > "$list"
+          while IFS= read -r file; do sha256sum "$file"; done < "$list" > "$RUNNER_TEMP/SHA256SUMS"
+          mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
+          cat SHA256SUMS
+          node "$GITHUB_WORKSPACE/scripts/check-release-shape.mjs" --tag "$GITHUB_REF_NAME" --branch origin/master --verify github-api --notes "$RUNNER_TEMP/notes.md"
         env:
-          TARBALL: ${{ steps.pack.outputs.tarball }}
+          GH_TOKEN: ${{ github.token }}
+      - name: Create the GitHub Release on the tag
         run: |
-          name=$(node -p 'require("./package.json").name')
-          version=$(node -p 'require("./package.json").version')
-          # npm view prints the version when it exists; it fails with E404 when it does not. Only E404 means
-          # "not there yet": any other failure stops the run, so nothing is published on a registry error.
-          if present=$(npm view "$name@$version" version 2>"$RUNNER_TEMP/npm-view.err"); then
-            if [ "$present" = "$version" ]; then
-              echo "::notice::$name@$version is already on npm, so it was not published again."
-              exit 0
-            fi
-          elif ! grep -q 'E404' "$RUNNER_TEMP/npm-view.err"; then
-            cat "$RUNNER_TEMP/npm-view.err" >&2
-            echo "::error::npm view failed for a reason other than E404, so nothing was published."
-            exit 1
-          fi
-          tag=latest
-          case "$GITHUB_REF_NAME" in *-*) tag=next ;; esac
-          npm publish "$TARBALL" --provenance --access public --tag "$tag"
+          assets="$(cd "$RUNNER_TEMP/release" && find . -type f ! -name SHA256SUMS | sed 's#^\./##' | sort)"
+          set --
+          for file in $assets; do set -- "$@" "$RUNNER_TEMP/release/$file"; done
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md" "$@" "$RUNNER_TEMP/release/SHA256SUMS"
+        env:
+          GH_TOKEN: ${{ github.token }}
