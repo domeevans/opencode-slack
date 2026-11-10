@@ -53,3 +53,12 @@ head that CI passed, and the tag points at it.
    `SHA256SUMS`.
 
 A tag that already exists stops step 3. Delete the old tag and its Release first, then start again.
+
+
+Each release has its own tag, and a Git install does not update by itself. To move to a newer release, remove the old entry with `opencode plugin remove github:joe-broadhead/opencode-slack#v0.0.0`, then add the new tag with `opencode plugin add github:joe-broadhead/opencode-slack#v<version>`.
+
+Or add the plugin to `opencode.json` instead, with the same spec:
+
+```json
+{ "plugins": [{ "package": "github:joe-broadhead/opencode-slack#v0.0.0" }] }
+```

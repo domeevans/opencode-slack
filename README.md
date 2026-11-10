@@ -17,7 +17,15 @@ opencode plugin add github:joe-broadhead/opencode-slack#v0.0.0
 
 Run `opencode reload`, or restart OpenCode. Then run `/slack-status`: it shows `not configured` until you give OpenCode your Slack app's client ID (see [Sign in](#sign-in)).
 
-The install takes the GitHub release tag. Its commit carries the built `dist/`, so the install runs no build. To update, remove the spec you installed with `opencode plugin remove`, add the new tag's spec with `opencode plugin add`, then run `opencode reload`.
+Each release has its own tag, and a Git install does not update by itself. To move to a newer release, remove the old entry with `opencode plugin remove github:joe-broadhead/opencode-slack#v0.0.0`, then add the new tag with `opencode plugin add github:joe-broadhead/opencode-slack#v<version>`.
+
+Or add the plugin to `opencode.json` instead, with the same spec:
+
+```json
+{ "plugins": [{ "package": "github:joe-broadhead/opencode-slack#v0.0.0" }] }
+```
+
+The install takes the GitHub release tag. Its commit carries the built `dist/`, so the install runs no build.
 
 ## Sign in
 
@@ -80,7 +88,7 @@ The method `events_list` runs `slack_events_list` the same way. See [Scripting](
    | `"read-only"` | the read tools | the private-channel search, file reads, writes and sends, and new tools: they are **denied** |
 
    ```jsonc
-   { "plugins": [{ "package": "@joe-broadhead/opencode-slack", "options": { "access": "read-only" } }] }
+   { "plugins": [{ "package": "github:joe-broadhead/opencode-slack#v0.0.0", "options": { "access": "read-only" } }] }
    ```
 
    The default block, generated from `defaultRules()` for `access: "all"`:
@@ -150,7 +158,7 @@ Everything works without options. Options set the client ID for everyone (instea
 ```jsonc
 {
   "plugins": [
-    { "package": "@joe-broadhead/opencode-slack", "options": { "oauth": { "scopes": ["channels:history", "channels:read", "search:read.public", "users:read", "search:read.private"] } } }
+    { "package": "github:joe-broadhead/opencode-slack#v0.0.0", "options": { "oauth": { "scopes": ["channels:history", "channels:read", "search:read.public", "users:read", "search:read.private"] } } }
   ]
 }
 ```
@@ -174,7 +182,7 @@ Put the client ID of your organisation's Slack app in the system configuration, 
   "$schema": "https://opencode.ai/config.json",
   "plugins": [
     {
-      "package": "@joe-broadhead/opencode-slack",
+      "package": "github:joe-broadhead/opencode-slack#v0.0.0",
       "options": {
         "oauth": { "client_id": "YOUR_SLACK_CLIENT_ID" }
       }
@@ -257,6 +265,7 @@ Sign out while the plugin is still installed: once it is removed, OpenCode no lo
 - **Tested on OpenCode 2.2.3, 2.2.4, 2.2.5 and 2.2.6 only.** Other releases in `>=2.2.3 <2.3.0` run untested.
 - **A script's calls are not recorded in the session.** Slack's audit logs record them.
 - **Names keep the doubled prefix.** A permission action is the tool's full name, such as `slack_slack_search_public`. Renaming it would break saved rules.
+- Updates are not automatic for a Git install, and `opencode plugin update` and `opencode plugin check` do not work on one: to move to a newer release, remove the old entry and add the new tag.
 
 ## Links
 

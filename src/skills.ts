@@ -8,8 +8,8 @@ type SkillInfo = typeof Skill.Info.Type
 const SKILLS = ["slack-search"] as const
 
 /**
- * The one next step for a broken install: reinstall this release's tag. `plugin update` takes no git install, so the
- * plugin is removed by its installed spec and added again.
+ * The one next step for a broken install: reinstall this release's tag. A Git install is removed by its installed spec
+ * and added again.
  */
 const REINSTALL = `Reinstall the plugin: run opencode plugin remove github:joe-broadhead/opencode-slack#v${VERSION}, then opencode plugin add github:joe-broadhead/opencode-slack#v${VERSION}, then opencode reload.`
 

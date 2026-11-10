@@ -11,7 +11,7 @@ Every option is optional. Pass options in the object form of a `plugins` entry:
   "$schema": "https://opencode.ai/config.json",
   "plugins": [
     {
-      "package": "@joe-broadhead/opencode-slack",
+      "package": "github:joe-broadhead/opencode-slack#v0.0.0",
       "options": {
         "oauth": {
           "client_id": "YOUR_SLACK_CLIENT_ID",
