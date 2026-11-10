@@ -411,6 +411,20 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
       expect(host.toolCalls().slice(asking)).toEqual([])
     })
 
+    // R2, per class: each restricted access value refuses its own class on the Code Mode path, with nothing sent.
+    test("R2 Code Mode, per class: at ask-changes a send is refused with nothing sent, and at read-only a private search is denied", async () => {
+      const before = host.toolCalls().length
+      await discovered("accessAsk")
+      const asking = (await host.client.session.create({ title: "code mode per class", agent: "build", ...at("accessAsk") } as never)).id
+      const sent = await codeMode("accessAsk", asking, `const r = await tools.slack["slack_send_message"]({ channel_id: "C0123ABCD45", text: "hi" }); throw new Error("SEEN " + JSON.stringify(r))`)
+      expect(sent).toHaveProperty("refused")
+      await discovered("accessReadOnly")
+      const denying = (await host.client.session.create({ title: "code mode per class", agent: "build", ...at("accessReadOnly") } as never)).id
+      const searched = await codeMode("accessReadOnly", denying, `const r = await tools.slack["slack_search_public_and_private"]({ query: "q" }); throw new Error("SEEN " + JSON.stringify(r))`)
+      expect(searched).toHaveProperty("refused")
+      expect(host.toolCalls().slice(before)).toEqual([])
+    })
+
     // R18: one host test per value, on the tools RPC path, where a refusal must reach nothing.
     describe("access", () => {
       for (const [project, access, effect] of [
