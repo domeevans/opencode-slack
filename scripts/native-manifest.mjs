@@ -10,7 +10,8 @@ export const MANIFEST_PATH = "manifest/native.json"
 const SHA256 = /^[0-9a-f]{64}$/
 const SHA1 = /^[0-9a-f]{40}$/
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
-const PLATFORM = /^[a-z0-9]+-[a-z0-9]+$/
+/** The platform names a native plugin ships, exactly: the four the native repositories build (UPDATED-6). Any other name is refused. */
+export const PLATFORMS = ["darwin-arm64", "darwin-x64", "linux-x64-gnu", "linux-arm64-gnu"]
 
 const isBytes = (value) => Number.isSafeInteger(value) && value > 0
 
@@ -35,7 +36,7 @@ export function manifestProblems(manifest, { plugin, tag, commit, repository } =
   for (const [module, platforms] of Object.entries(modules)) {
     for (const [platform, entry] of Object.entries(platforms ?? {})) {
       const where = `${module} ${platform}`
-      if (!PLATFORM.test(platform)) problems.push(`${where}: the platform name is not like darwin-arm64`)
+      if (!PLATFORMS.includes(platform)) problems.push(`${where}: the platform name must be one of ${PLATFORMS.join(", ")}`)
       problems.push(...assetProblems(entry, where, base))
       if (!entry?.executable || typeof entry.executable.name !== "string" || !isBytes(entry.executable.bytes) || !SHA256.test(entry.executable.sha256 ?? "")) {
         problems.push(`${where}: executable must name a file, its bytes and its sha256`)

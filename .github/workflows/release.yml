@@ -18,8 +18,8 @@ concurrency:
 
 env:
   # Set when the kit is copied into a plugin: the plugin's status RPC id and its skill id (the stock check reads them).
-  PLUGIN_RPC: jobs.scheduler
-  PLUGIN_SKILL: jobs
+  PLUGIN_RPC: slack.workspace
+  PLUGIN_SKILL: slack-search
 
 jobs:
   # The OpenCode hosts this release is tested on come from the plugin's own TESTED_HOSTS list, read here, so the matrix
