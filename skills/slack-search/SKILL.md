@@ -14,20 +14,15 @@ Find, then read, then cite. The tools are Slack's own, in Code Mode's `slack` na
 - **A search** returns `{ results, pagination_info }`, and both are strings. `results` holds one block per hit, with the lines `Channel: #name (ID: C…)`, `From`, `Time`, `Message_ts`, `Reply count`, `Permalink` and `Text`, then `Context before` and `Context after` messages, which have no permalink. `pagination_info` holds the next `cursor`.
 - **What to do with it:** return the text, or pick fields out with a regular expression. Something like `hits.messages` is `undefined`.
 - **A canvas:** `slack_read_canvas` returns `{ canvas_id, markdown_content, section_id_mapping }`.
-- **Size:** a default search costs about 3.5 KB per hit, so a few searches at `limit: 20` pass OpenCode's 50 KB output cap and get cut off.
-  - To shrink results, pass `include_context: false` (about 60 % smaller, permalinks kept) and a `limit` of 10 or less, and return only the fields you need.
-  - Never pass `response_format: "concise"` when you will cite or open a thread: it drops every permalink.
+- **Size:** a default search costs about 3.5 KB per hit, so a few searches at `limit: 20` get cut off. Pass `include_context: false` (about 60 % smaller, permalinks kept) and a `limit` of 10 or less, and return only the fields you need. Never pass `response_format: "concise"` when you will cite or open a thread: it drops every permalink.
 
 ## 1. Find
 
 `slack_search_public({ query, limit, sort, cursor, content_types, include_context })` comes first. It searches public channels and runs without asking.
 
 - **Narrow with modifiers inside `query`:** `in:#release`, `from:<@U0123ABC>` (get the ID from `slack_search_users({ query: "Ana" })`), `is:thread`, `"exact phrase"`. For example: `query: "launch date in:#release after:2026-10-01"`.
-- **Dates go in `query`:** use `after:YYYY-MM-DD`, `before:`, `on:` or `during:october`.
-  - The `after` and `before` parameters take Unix seconds as a string, such as `"1759276800"`.
-  - Slack silently ignores an ISO date in those two parameters, so your search would cover all time while your answer claims a range.
-- **Newest first:** `sort: "timestamp"`.
-- **A channel's ID:** `slack_search_channels({ query: "release" })`.
+- **Dates go in `query`:** use `after:YYYY-MM-DD`, `before:`, `on:` or `during:october`. The `after` and `before` parameters take Unix seconds as a string, such as `"1759276800"`; Slack silently ignores an ISO date there, so your answer would claim a range the search never covered.
+- **Newest first:** `sort: "timestamp"`. **A channel's ID:** `slack_search_channels({ query: "release" })`.
 - **Canvases:** search with `query: "type:canvases <topic>"` and `content_types: "files"`, then read one with `slack_read_canvas({ canvas_id: "F…" })`. Prefer it to `slack_read_file`: both work, and `slack_read_file` returns less structure.
 - **Recall:** several small searches find more than one big one. If nothing matches, drop modifiers, try synonyms, or switch between keywords and a plain question.
 - **Rate limits:** Slack limits each tool separately, and parallel searches hit the limit quickly.
