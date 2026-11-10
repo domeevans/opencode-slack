@@ -135,3 +135,19 @@ describe("internal wording", () => {
     expect(hits).toEqual([])
   })
 })
+
+// The family's working folders never reach a public file. Every git-tracked file is read, so a note in a doc, a skill or
+// a fixture is caught as well as code. AGENTS.md and this test name the folder on purpose and are skipped.
+describe("the release working folder", () => {
+  test("no git-tracked file names it, outside AGENTS.md and this test", async () => {
+    const { execFileSync } = await import("node:child_process")
+    const listed = execFileSync("git", ["ls-files", "-z"], { cwd: REPO, encoding: "utf8" }).split("\0").filter(Boolean)
+    const skip = new Set(["AGENTS.md", "test/unit/forbidden.test.ts"])
+    const hits = listed.filter((path) => !skip.has(path)).flatMap((path) => {
+      const bytes = readFileSync(join(REPO, path))
+      if (bytes.includes(0)) return []
+      return bytes.toString("utf8").split(/\r?\n/).flatMap((line, index) => (/opencode-release\//.test(line) ? [`${path}:${index + 1}`] : []))
+    })
+    expect(hits).toEqual([])
+  })
+})
