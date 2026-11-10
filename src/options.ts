@@ -1,4 +1,5 @@
 import { CALLBACK_PORT_EXAMPLE, DEFAULT_REDIRECT_URI, DEFAULT_SCOPES, HOSTED_REDIRECT_EXAMPLE } from "./defaults.js"
+import { CHANNEL_ID, MAX_CHANNELS } from "./events.js"
 
 /** What the default rules allow. `all` is the default; the other two are how a user restricts the plugin. */
 export type Access = "all" | "ask-changes" | "read-only"
@@ -16,6 +17,8 @@ export interface Options {
   readonly allowUntestedHost: boolean
   /** What the generated default rules allow: everything, changes ask, or read-only. */
   readonly access: Access
+  /** The channel and direct message ids `slack_events_list` reads, in order; none by default. */
+  readonly channels: readonly string[]
 }
 
 /** A rejected option. Messages name the field and never echo its value. */
@@ -30,7 +33,8 @@ export type ParsedOptions =
   | { readonly ok: true; readonly options: Options }
   | { readonly ok: false; readonly error: OptionsError }
 
-const TOP_KEYS = ["oauth", "allowUntestedHost", "access"]
+const TOP_KEYS = ["oauth", "allowUntestedHost", "access", "events"]
+const EVENTS_KEYS = ["channels"]
 const OAUTH_KEYS = ["client_id", "redirect_uri", "callback_port", "scopes", "client_secret"]
 const NO_SPACES = /^\S+$/
 
@@ -126,6 +130,20 @@ export function parseOptions(input: unknown): ParsedOptions {
   if (typeof access !== "string" || !(ACCESS_VALUES as readonly string[]).includes(access)) {
     return fail("access", 'Must be "all", "ask-changes" or "read-only".', 'Set access to "all" (the default), "ask-changes" or "read-only".')
   }
+  const events = raw.events ?? {}
+  if (!isRecord(events)) return fail("events", "Must be an object.", 'Set events to an object such as { "channels": ["C…"] }.')
+  const unknownEventsKey = Object.keys(events).find((key) => !EVENTS_KEYS.includes(key))
+  if (unknownEventsKey !== undefined) {
+    return fail(`events.${unknownEventsKey}`, "This option is not supported.", `Remove it. Supported events options: ${EVENTS_KEYS.join(", ")}.`)
+  }
+  const channels: unknown = events.channels ?? []
+  if (!Array.isArray(channels) || !channels.every((id) => typeof id === "string" && CHANNEL_ID.test(id))) {
+    return fail("events.channels", "Must be a list of Slack conversation or user ids, such as C0123ABCD45.", "List the ids of the channels and direct messages to collect: a channel's id is at the bottom of its details in Slack.")
+  }
+  if (new Set(channels).size !== channels.length) return fail("events.channels", "Lists a channel more than once.", "Remove the duplicate id.")
+  if (channels.length > MAX_CHANNELS) {
+    return fail("events.channels", `Lists more than ${MAX_CHANNELS} channels.`, `Keep the ${MAX_CHANNELS} channels and direct messages that matter most.`)
+  }
 
   return {
     ok: true,
@@ -137,6 +155,7 @@ export function parseOptions(input: unknown): ParsedOptions {
       ...(clientSecret === undefined ? {} : { clientSecret }),
       allowUntestedHost,
       access: access as Access,
+      channels: [...channels] as string[],
     },
   }
 }

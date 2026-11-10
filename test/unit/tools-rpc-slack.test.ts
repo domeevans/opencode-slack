@@ -157,21 +157,21 @@ describe("the tools RPC in setup", () => {
   test("describe lists every known tool with its class, and with a session its resolved permission", async () => {
     const host = await setUp()
     const described = (await host.script("describe", "")) as { methods: { name: string; class: string; permission?: string }[] }
-    const expected = Object.fromEntries(METHODS.map((method) => [method.name, method.class]))
+    const expected = Object.fromEntries([...METHODS.map((method) => [method.name, method.class]), ["events_list", "read"]])
     expect(Object.fromEntries(described.methods.map((method) => [method.name, method.class]))).toEqual(expected)
     for (const method of described.methods) expect(Object.hasOwn(method, "permission")).toBe(false)
     const withSession = (await host.script("describe", "ses_build")) as { methods: { name: string; permission: string }[] }
-    expect(Object.fromEntries(withSession.methods.map((method) => [method.name, method.permission]))).toEqual(Object.fromEntries(METHODS.map((method) => [method.name, "allow"])))
+    expect(Object.fromEntries(withSession.methods.map((method) => [method.name, method.permission]))).toEqual(Object.fromEntries([...METHODS.map((method) => [method.name, "allow"]), ["events_list", "allow"]]))
 
     const restricted = await setUp({ options: { oauth: { client_id: "C1" }, access: "ask-changes" } })
     const resolved = (await restricted.script("describe", "ses_build")) as { methods: { name: string; permission: string }[] }
     expect(Object.fromEntries(resolved.methods.map((method) => [method.name, method.permission])))
-      .toEqual(Object.fromEntries(METHODS.map((method) => [method.name, READS.includes(method.name) ? "allow" : "ask"])))
+      .toEqual(Object.fromEntries([...METHODS.map((method) => [method.name, READS.includes(method.name) ? "allow" : "ask"]), ["events_list", "allow"]]))
   })
 
   test("has no method for an unknown tool", async () => {
     const host = await setUp()
-    expect(Object.keys(host.rpcs.get(TOOLS_RPC_ID)!).sort()).toEqual(["describe", ...METHODS.map((method) => method.name)].sort())
+    expect(Object.keys(host.rpcs.get(TOOLS_RPC_ID)!).sort()).toEqual(["describe", "events_list", ...METHODS.map((method) => method.name)].sort())
     expect(() => host.script(UNKNOWN, "ses_build")).toThrow(/no method/)
   })
 
@@ -190,7 +190,7 @@ describe("the tools RPC in setup", () => {
     expect(refused).toMatchObject({ error: "failed", data: { code: "CLIENT_ID_MISSING", next: status.nextStep } })
     expect(refused.message).toBe(`CLIENT_ID_MISSING: the "slack" server is not registered. Next step: ${status.nextStep}`)
     const described = (await host.script("describe", "")) as { methods: { available: boolean; reason?: string }[] }
-    expect(described.methods.map((method) => [method.available, method.reason])).toEqual(METHODS.map(() => [false, "CLIENT_ID_MISSING"]))
+    expect(described.methods.map((method) => [method.available, method.reason])).toEqual([...METHODS.map(() => [false, "CLIENT_ID_MISSING"]), [false, "CLIENT_ID_MISSING"]])
     expect(host.executed).toEqual([])
   })
 

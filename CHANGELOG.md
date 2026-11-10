@@ -19,6 +19,11 @@ All notable changes to this project are documented here. The format follows [Kee
 - The `access` option, `"all"` (the default), `"ask-changes"` and `"read-only"` (there is no earlier option to map): it generates the default rules from the tool classes, so `"ask-changes"` lets the reads run and asks for the private-channel search, file reads, writes, sends and new tools, and `"read-only"` denies them. Status and the `/slack` dialog show what it allows.
 - `docs/scripting.md` carries the family's envelope, location section, unload note, result wording and refusal table, word for word.
 - tools RPC v2: every known tool is scriptable under a prior explicit allow. `slack.workspace.tools` now has one method per known tool, by exact name and with a class (read, send or write), not only the fourteen reads. The rule for each call is resolved before the tool runs, in OpenCode's own order; only an `allow` runs, and an `ask` is refused with no prompt and no tool call. `describe` reports each method's class, and — given a session — that session's permission, plus any live tool this plugin does not classify. A saved "Always allow" approval no longer authorizes an ad-hoc script: a script's grant is a rule in the agent's or the session's config, or a Jobs `jobs_run_script` run session. `opencode api` callers must send `-H "x-opencode-directory:$PWD"`, or the call reaches the service's default location and fails `rpc.unavailable`.
+## [0.0.8] - 2026-11-08
+
+### Added
+
+- `slack_events_list`, Memory's source of Slack events: the messages posted since a cursor in the channels and direct messages listed in the new `events.channels` option (at most 16), oldest first, as the shared `events_list` contract's events (`src/host/events-list.ts`, pinned by `scripts/check-copies.mjs`). It reads `slack_read_user_profile` and `slack_read_channel` through OpenCode, never the private search or a file, parses Slack's Markdown answers into structured events, is a Code Mode tool and the tools RPC method `events_list`, and has a default allow rule and a `jelly` declaration as a read that never asks. New error codes: `INPUT_INVALID`, `SOURCE_UNKNOWN`, `ACCOUNT_UNKNOWN`, `CURSOR_INVALID`, `TOO_MANY_MESSAGES`, `UPSTREAM_ERROR`, `UPSTREAM_UNREADABLE` and `TOOL_UNAVAILABLE`.
 
 ## [0.0.7] - 2026-11-06
 

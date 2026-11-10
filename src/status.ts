@@ -1,5 +1,6 @@
 import type { PluginCode } from "./codes.js"
 import { APP_NAME, SERVER_DISPLAY_NAME, type ClientState } from "./connect.js"
+import { EVENTS_LIST } from "./host/events-list.js"
 import { APP_MANIFEST_URL, SERVER, SLACK_MCP_URL, SUPPORTED_HOST_RANGE } from "./defaults.js"
 import type { ParsedOptions } from "./options.js"
 import type { Access } from "./options.js"
@@ -181,7 +182,8 @@ function connection(status: ServerStatus | undefined, unguarded: readonly string
 export function buildStatus(input: StatusInput): Status {
   const options = input.parsed.ok ? input.parsed.options : undefined
   const host = { version: input.hostVersion === "" ? null : input.hostVersion, range: SUPPORTED_HOST_RANGE, tested: input.hostTested }
-  const names = input.tools.filter((tool) => tool.options?.namespace === SERVER).map((tool) => tool.name)
+  // slack_events_list is the plugin's own tool in the server's namespace, not one Slack lists.
+  const names = input.tools.filter((tool) => tool.options?.namespace === SERVER && tool.name !== EVENTS_LIST).map((tool) => tool.name)
   const unknown = names.filter((name) => classify(name) === "unknown").sort()
   const tools = {
     read: names.filter((name) => classify(name) === "read").length,

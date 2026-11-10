@@ -1,6 +1,7 @@
 import type { Plugin } from "@opencode/plugin"
 import type { Access } from "./options.js"
 import { SERVER } from "./defaults.js"
+import { EVENTS_LIST } from "./host/events-list.js"
 import { KNOWN_TOOLS } from "./tools.js"
 
 type AgentEditor = Parameters<Parameters<Plugin.Context["agent"]["transform"]>[0]>[0]
@@ -30,6 +31,8 @@ export function defaultRules(access: Access = "all"): Rule[] {
   return [
     rule(`${SERVER}_*`, other),
     ...READ_LIKE.map((tool) => rule(`${SERVER}_${tool}`, "allow")),
+    // The plugin's own events_list only reads, and Memory's collector runs it with no one there.
+    rule(`${SERVER}_${EVENTS_LIST}`, "allow"),
     ...OTHER_TOOLS.map((tool) => rule(`${SERVER}_${tool}`, other)),
   ]
 }

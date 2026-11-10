@@ -13,7 +13,7 @@ declaration, because that schema accepts no unknown keys.
 
 ## Tools and permissions
 
-27 tools are declared (14 read-only). Jelly's agents have no base "allow everything"
+28 tools are declared (15 read-only). Jelly's agents have no base "allow everything"
 rule, so this plugin's own default rules, which it puts after that rule, never reach them. Jelly
 writes each declared `ask` or `deny` as that tool's default instead (the person's own choice
 replaces it), and denies a read-only helper every tool not marked `readOnly`. A declared `allow`
@@ -22,7 +22,7 @@ changes nothing in Jelly.
 - Ask: none. Every tool is declared `allow`, so a Jelly agent runs what the plugin's own default allows.
 - Off: none. To make one ask or stop, declare `ask` or `deny` for it, or set the plugin's `access` option in the agent's options.
 
-Private search and file reads are marked read-only and, like every tool, allowed by default; declare a later `ask` rule if the agent should not read private content.
+Private search and file reads are marked read-only and, like every tool, allowed by default; declare a later `ask` rule if the agent should not read private content. The plugin's own `slack.events_list` is for Memory's collector, which runs it unattended, so it never asks; each Slack read it makes follows that read's own effect.
 
 A tool the upstream server adds later is not declared, so in Jelly it is not asked about by
 default. Keep `jelly.tools` in step with the known-tool list; `test/**/jelly.test.ts` checks

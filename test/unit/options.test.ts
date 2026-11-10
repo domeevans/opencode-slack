@@ -22,6 +22,7 @@ describe("parseOptions defaults", () => {
         scopes: ["channels:history", "channels:read", "search:read.public", "users:read"],
         allowUntestedHost: false,
         access: "all",
+        channels: [],
       },
     })
   })
@@ -29,7 +30,7 @@ describe("parseOptions defaults", () => {
   test.each([undefined, null, {}, { oauth: {} }])("%p without a client ID is valid and leaves the client to /connect", (input) => {
     expect(parseOptions(input)).toEqual({
       ok: true,
-      options: { redirectUri: DEFAULT_REDIRECT_URI, scopes: [...DEFAULT_SCOPES], allowUntestedHost: false, access: "all" },
+      options: { redirectUri: DEFAULT_REDIRECT_URI, scopes: [...DEFAULT_SCOPES], allowUntestedHost: false, access: "all", channels: [] },
     })
   })
 
@@ -37,6 +38,7 @@ describe("parseOptions defaults", () => {
     const parsed = parseOptions({
       oauth: { client_id: CLIENT, redirect_uri: "http://127.0.0.1:9000/slack/cb", scopes: ["search:read.public"], client_secret: "s" },
       allowUntestedHost: true,
+      events: { channels: ["C0123ABCD45", "D0123ABCD45", "U0123ABCD45"] },
     })
     expect(parsed).toEqual({
       ok: true,
@@ -47,6 +49,7 @@ describe("parseOptions defaults", () => {
         clientSecret: "s",
           allowUntestedHost: true,
         access: "all",
+        channels: ["C0123ABCD45", "D0123ABCD45", "U0123ABCD45"],
       },
     })
   })
@@ -61,6 +64,7 @@ describe("parseOptions defaults", () => {
         scopes: [...DEFAULT_SCOPES],
         allowUntestedHost: false,
         access: "all",
+        channels: [],
       },
     })
   })
@@ -100,7 +104,7 @@ describe("parseOptions rejects", () => {
 
   test("unknown top-level keys, naming the supported ones", () => {
     expect(rejected({ ...withOAuth({}), policy: { allow: ["write"] } })).toEqual({
-      code: "OPTIONS_INVALID", field: "policy", message: "This option is not supported.", next: "Remove it. Supported options: oauth, allowUntestedHost, access.",
+      code: "OPTIONS_INVALID", field: "policy", message: "This option is not supported.", next: "Remove it. Supported options: oauth, allowUntestedHost, access, events.",
     })
   })
 
@@ -231,9 +235,20 @@ describe("parseOptions rejects", () => {
     })
   })
 
+  test.each([
+    ["events that is a list", { events: [] }, "events", "Must be an object."],
+    ["an unknown events key", { events: { since: "x" } }, "events.since", "This option is not supported."],
+    ["channels that is a string", { events: { channels: "C0123ABCD45" } }, "events.channels", "Must be a list of Slack conversation or user ids, such as C0123ABCD45."],
+    ["a channel that is a name", { events: { channels: ["#general"] } }, "events.channels", "Must be a list of Slack conversation or user ids, such as C0123ABCD45."],
+    ["a channel twice", { events: { channels: ["C0123ABCD45", "C0123ABCD45"] } }, "events.channels", "Lists a channel more than once."],
+    ["17 channels", { events: { channels: Array.from({ length: 17 }, (_, n) => `C0123ABC${String(n).padStart(3, "0")}`) } }, "events.channels", "Lists more than 16 channels."],
+  ])("%s", (_label, rest, field, message) => {
+    expect(rejected(withOAuth({}, rest))).toMatchObject({ code: "OPTIONS_INVALID", field, message })
+  })
+
   test("server is not an option: the server is always named slack", () => {
     expect(rejected(withOAuth({}, { server: "work" }))).toEqual({
-      code: "OPTIONS_INVALID", field: "server", message: "This option is not supported.", next: "Remove it. Supported options: oauth, allowUntestedHost, access.",
+      code: "OPTIONS_INVALID", field: "server", message: "This option is not supported.", next: "Remove it. Supported options: oauth, allowUntestedHost, access, events.",
     })
   })
 

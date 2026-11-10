@@ -173,8 +173,9 @@ export function fakeHost(input: FakeHostInput = {}) {
   // Every registered RPC contract by ID.
   const contracts = new Map<string, { methods: Record<string, { input: unknown; output: unknown }> }>()
   const hooks = new Set<unknown>()
-  // Code Mode namespace descriptions, by name.
+  // Code Mode namespace descriptions, by name, and the plugin's own tools.
   const namespaces = new Map<string, Namespace>()
+  const tools: { name: string; options?: unknown; execute: (input: unknown, context: unknown) => Promise<unknown> }[] = []
   let failLists = false
 
   const registration = { dispose: async () => {} }
@@ -244,7 +245,10 @@ export function fakeHost(input: FakeHostInput = {}) {
       list: async () => (input.tools ?? []) as never,
       transform: async (callback) => {
         calls.push("tool.transform")
-        callback({ namespace: (namespace: Namespace) => void namespaces.set(namespace.name, namespace) } as unknown as ToolEditor)
+        callback({
+          namespace: (namespace: Namespace) => void namespaces.set(namespace.name, namespace),
+          add: (tool: (typeof tools)[number]) => void tools.push(tool),
+        } as unknown as ToolEditor)
         return registration
       },
     },
@@ -351,6 +355,7 @@ export function fakeHost(input: FakeHostInput = {}) {
     contracts,
     hooks,
     namespaces,
+    tools,
     script,
     status,
     slashStatus,

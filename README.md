@@ -47,6 +47,10 @@ The Slack tools are Slack's own. With Code Mode, which is on by default, agents 
 - `OpenCode`: the version, whether it is tested (2.2.3, 2.2.4, 2.2.5 and 2.2.6), and the supported range;
 - `Next step`: exactly one, or `Nothing to do.`
 
+### Memory's events
+
+`slack_events_list` is for Memory's collector, not for answering questions: it lists the messages posted since a cursor in the channels and direct messages you enable with the `events.channels` option, as normalised events, oldest first, with the author, thread and permalink. It only reads channels with `slack_read_channel`, never the private search or a file, and never asks with the default rules. It is this plugin's side of the shared `events_list` source contract ([configuration](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#events-list)). Its errors are in the configuration guide's Errors table.
+
 ### Scripts
 
 A script or a cron job can call every Slack tool this plugin knows with no model, through `opencode api`: the fourteen reads, the three sends and the ten writes. It runs as a session and its agent, under that agent's permission rules and the session's own. The rule is resolved first, so only an `allow` runs. **A script gets the same default as the model:** at `access: "all"` the plugin's block allows every tool, so a script can read and write everything the account can. Set `access: "ask-changes"` or `"read-only"`, or add a later rule, to restrict it; an `ask` is refused because no one can answer it. A saved "Always allow" does not authorize an ad-hoc script; a Jobs `jobs_run_script` one-off does, with the user's approval:
@@ -60,6 +64,8 @@ opencode api post /api/rpc/slack.workspace.tools/slack_search_public \
 Without `x-opencode-directory:$PWD` the call reaches the service's default location and fails `rpc.unavailable` when the plugin is not loaded there.
 
 See [Scripting](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/scripting.md).
+
+The method `events_list` runs `slack_events_list` the same way. See [Scripting](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/scripting.md).
 
 ## Permissions
 
@@ -94,6 +100,7 @@ See [Scripting](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/s
      { "action": "slack_slack_list_user_channels", "resource": "*", "effect": "allow" },
      { "action": "slack_slack_read_list", "resource": "*", "effect": "allow" },
      { "action": "slack_slack_search_emojis", "resource": "*", "effect": "allow" },
+     { "action": "slack_events_list", "resource": "*", "effect": "allow" },
      { "action": "slack_slack_search_public_and_private", "resource": "*", "effect": "allow" },
      { "action": "slack_slack_read_file", "resource": "*", "effect": "allow" },
      { "action": "slack_slack_send_message", "resource": "*", "effect": "allow" },
@@ -138,7 +145,7 @@ Do not put this block in the top-level `permissions`. OpenCode adds top-level ru
 
 ## Configure
 
-Everything works without options. Options set the client ID for everyone (instead of `/connect`), the callback URL and its local port, the scopes, a client secret for apps without PKCE, and the host check. To pass them, use the object form of the `plugins` entry:
+Everything works without options. Options set the client ID for everyone (instead of `/connect`), the callback URL and its local port, the scopes, a client secret for apps without PKCE, the host check, and the channels `slack_events_list` reads for Memory (`"events": { "channels": ["C0123ABCD45"] }`). To pass them, use the object form of the `plugins` entry:
 
 ```jsonc
 {
@@ -198,6 +205,14 @@ Run `/slack-status` (or `/slack` in the TUI) first. Its `Connection` row shows a
 | `connected` | none | Ready. The next step reads `Nothing to do.` | If status names agents without default rules, put the default rules first in their own permissions (see above). |
 | — | `STATUS_UNAVAILABLE` | Status itself could not be read. | Run `/slack-status` again in a moment. |
 | — | `SKILLS_INVALID` | A bundled skill is missing or has invalid frontmatter, so the plugin does not load. | Run `opencode plugin update @joe-broadhead/opencode-slack`, then `opencode reload`. |
+| — | `INPUT_INVALID` | The `events_list` input is invalid; the message names the problems. | Pass `since`, `cursor`, `limit`, `account` or `source` as the tool's schema describes them. |
+| — | `SOURCE_UNKNOWN` | This plugin lists only the source `slack`. | Leave `source` out, or pass `slack`. |
+| — | `CURSOR_INVALID` | The cursor was not issued by `events_list` for this Slack workspace and sign-in. | Call `events_list` without a cursor, with `since`, to start again. |
+| — | `ACCOUNT_UNKNOWN` | The signed-in Slack workspace is not the account `events_list` was asked for. | Leave `account` out, or pass the signed-in workspace. |
+| — | `TOO_MANY_MESSAGES` | More messages were posted in a channel after the cursor or `since` than one `events_list` call reads. | Call `events_list` again with a later `since`, without a cursor. |
+| — | `UPSTREAM_UNREADABLE` | Slack's answer to a read `events_list` makes is in a shape it does not read. | Call the tool directly to see Slack's answer, and run `/slack-status`. |
+| — | `UPSTREAM_ERROR` | Slack refused a read `events_list` makes, such as a missing scope or a channel you cannot read. | Check that the channel id in `events.channels` is one you can read, then call `events_list` again with the same cursor. |
+| — | `TOOL_UNAVAILABLE` | OpenCode does not list a read `events_list` needs, or `slack` is your own server. | Wait a few seconds, then run `/slack-status` and follow its next step. |
 
 If status itself cannot be read, `/slack-status` says `STATUS_UNAVAILABLE`; run it again in a moment. If a bundled skill is missing or broken, OpenCode reports `SKILLS_INVALID` when it loads the plugin; run `opencode plugin update @joe-broadhead/opencode-slack`, then `opencode reload`.
 

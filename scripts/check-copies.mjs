@@ -2,7 +2,8 @@
 //   node scripts/check-copies.mjs          check the copies this plugin has
 //   node scripts/check-copies.mjs --print  print each copy's hash, after a change made in every plugin at once
 // Each plugin keeps its own copy, because each bundle and each test suite stands alone. The hashes below name the one
-// version all plugins carry: the tools RPC outside its PLUGIN-SPECIFIC block, and the declaration test kit whole.
+// version all plugins carry: the tools RPC outside its PLUGIN-SPECIFIC block, the declaration test kit whole, and the
+// events_list source contract whole (only source plugins carry it).
 import { createHash } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
 
@@ -12,6 +13,7 @@ const END = "// <<< PLUGIN-SPECIFIC <<<"
 const COPIES = [
   { path: "src/host/tools-rpc.ts", optional: true, sha256: "57377eb3844ff89a4a55fbf6d83f8ab172d4e403b368c116ea4751850fc840fd", part: sharedPart },
   { path: "test/support/jelly-kit.ts", optional: false, sha256: "ab599abcf041044c77e7938c3d9a081e00072487a7ec20b654d86c8230951190", part: (text) => text },
+  { path: "src/host/events-list.ts", optional: true, sha256: "9d72fc8dd88fa88b22bf74eb078ad05afcaebff1b324976c42250c77d1ea605e", part: (text) => text },
 ]
 
 function sharedPart(text, path) {

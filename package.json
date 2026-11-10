@@ -1,6 +1,6 @@
 {
   "name": "@joe-broadhead/opencode-slack",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Unofficial OpenCode plugin for Slack",
   "keywords": [
     "opencode",
@@ -167,6 +167,12 @@
       {
         "name": "slack.slack_search_emojis",
         "permission": "slack_slack_search_emojis",
+        "effect": "allow",
+        "readOnly": true
+      },
+      {
+        "name": "slack.events_list",
+        "permission": "slack_events_list",
         "effect": "allow",
         "readOnly": true
       },
