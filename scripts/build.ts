@@ -49,29 +49,32 @@ const version: Plugin = {
 }
 
 await rm(new URL("../dist", import.meta.url), { recursive: true, force: true })
-const result = await build({
+// The server part is minified to keep the package within its size budget. The TUI part stays readable, as GitHub's does.
+const common = {
   absWorkingDir: ROOT,
-  entryPoints: { index: "src/index.ts", tui: "src/tui.tsx" },
   outdir: "dist",
   bundle: true,
   splitting: false,
-  format: "esm",
-  platform: "node",
+  format: "esm" as const,
+  platform: "node" as const,
   target: "es2022",
   external: HOST,
-  legalComments: "none",
-  metafile: true,
-  logLevel: "warning",
+  legalComments: "none" as const,
+  metafile: true as const,
+  logLevel: "warning" as const,
   plugins: [version, solid],
-})
+}
+const server = await build({ ...common, entryPoints: { index: "src/index.ts" }, minify: true })
+const tui = await build({ ...common, entryPoints: { tui: "src/tui.tsx" } })
+const outputsOf = { ...server.metafile.outputs, ...tui.metafile.outputs }
 
-const problems = Object.entries(result.metafile.outputs).flatMap(([file, output]) =>
+const problems = Object.entries(outputsOf).flatMap(([file, output]) =>
   output.imports
     .filter((entry) => !entry.external || entry.path.startsWith(".") || !provided(entry.path))
     .map((entry) => `${file}: ${entry.path}`),
 )
-const outputs = Object.keys(result.metafile.outputs).sort()
+const outputs = Object.keys(outputsOf).sort()
 if (problems.length > 0 || outputs.join(" ") !== "dist/index.js dist/tui.js") {
   throw new Error(`The build must emit only dist/index.js and dist/tui.js, importing only host modules. Found ${outputs.join(", ")}; ${problems.join(", ") || "no bad imports"}.`)
 }
-for (const [file, output] of Object.entries(result.metafile.outputs)) console.log(`built ${file} (${(output.bytes / 1024).toFixed(1)} KiB)`)
+for (const [file, output] of Object.entries(outputsOf)) console.log(`built ${file} (${(output.bytes / 1024).toFixed(1)} KiB)`)
