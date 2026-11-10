@@ -180,13 +180,14 @@ describe("the default rules block", () => {
 
 // Every "tested on …" mention states TESTED_HOSTS, so a release added to the list cannot leave a stale sentence behind.
 describe("tested hosts", () => {
-  const UNRELEASED = /## \[Unreleased\]([\s\S]*?)(?=\n## |$)/.exec(read("CHANGELOG.md"))?.[1] ?? ""
+  // The newest release's section: the pending notes until a release, and the latest one after it.
+  const NEWEST = /## \[[^\]]+\][^\n]*\n([\s\S]*?)(?=\n## |$)/.exec(read("CHANGELOG.md"))?.[1] ?? ""
   const SOURCES: [string, string][] = [
     ["README.md", read("README.md")],
     ["AGENTS.md", read("AGENTS.md")],
     ["SECURITY.md", read("SECURITY.md")],
     ["docs/configuration.md", read("docs/configuration.md")],
-    ["CHANGELOG.md (Unreleased)", UNRELEASED],
+    ["CHANGELOG.md (newest release)", NEWEST],
   ]
 
   test.each(SOURCES)("%s names exactly TESTED_HOSTS wherever it says what is tested", (file, text) => {
