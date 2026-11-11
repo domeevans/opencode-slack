@@ -32,16 +32,24 @@ stop() {
 
 rm -rf "$work"
 mkdir -p "$work/stock" "$work/home" "$work/project"
-npm install --prefix "$work/stock" --ignore-scripts --no-audit --no-fund "@opencode/cli@$version" >/dev/null 2>&1 || fail "could not install @opencode/cli@$version"
-bin="$(find "$work/stock/node_modules/@opencode" -path '*/bin/opencode' -type f | head -n 1)"
-[ -n "$bin" ] || fail "no opencode binary in @opencode/cli@$version"
+npm install --prefix "$work/stock" --ignore-scripts --no-audit --no-fund "@opencode/cli@$version" > "$work/npm.txt" 2>&1 || { tail -n 20 "$work/npm.txt" >&2; fail "could not install @opencode/cli@$version"; }
+# BEGIN select-binary
+# The stock binary for this machine: the platform package named for it (linux-x64, darwin-arm64, ...). npm installs every
+# optional package whose os and cpu fit, so a Linux machine also gets the musl and baseline builds. Those are never picked:
+# a musl build needs /lib/ld-musl, which a glibc system does not have, and `find | head -n 1` picked one by directory order
+# (tavily's release run, 2026-11-11: "could not set the service port").
+platform="$(node -p 'process.platform + "-" + process.arch')"
+bin="$work/stock/node_modules/@opencode/cli-$platform/bin/opencode"
+[ -f "$bin" ] || fail "no @opencode/cli-$platform binary in @opencode/cli@$version: the platform package for this machine is missing"
 chmod +x "$bin"
+"$bin" --version > "$work/version.txt" 2>&1 || { cat "$work/version.txt" >&2; fail "the $platform binary does not run"; }
+# END select-binary
 
 # An isolated profile: its own HOME (so the global plugin config is this one) and its own service port.
 export HOME="$work/home"
 (cd "$work/project" && git init -q)
 port="$(node -e 'const s = require("net").createServer(); s.listen(0, () => { console.log(s.address().port); s.close() })')"
-"$bin" service set port "$port" >/dev/null 2>&1 || fail "could not set the service port"
+"$bin" service set port "$port" > "$work/port.txt" 2>&1 || { cat "$work/port.txt" >&2; fail "could not set the service port"; }
 
 "$bin" plugin add "git+file://$checkout#$tag" >"$work/add.log" 2>&1 || { cat "$work/add.log" >&2; fail "plugin add of $tag failed"; }
 
