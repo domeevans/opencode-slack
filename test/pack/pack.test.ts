@@ -1,4 +1,4 @@
-// Pack, install and import the published shape; with SLACK_PACK_TARBALL set, the release's own tarball instead. The
+// Pack, install and import the published shape; with PACK_TARBALL (or SLACK_PACK_TARBALL) set, the release's own tarball instead. The
 // tarball holds exactly the files whitelist and installs with scripts disabled and no dependencies. Installed alone,
 // it loads in each stock OpenCode release, which provides @opencode/plugin itself. Next to the host packages
 // OpenCode 2.2.3 ships, both entry points import under Bun.
@@ -71,10 +71,10 @@ function readTarball(path: string): Packed {
 }
 
 let packed: Packed | undefined
-/** The tarball under test: the release's own (SLACK_PACK_TARBALL), or a fresh pack of the built checkout. */
+/** The tarball under test: the release's own (PACK_TARBALL, which the release workflow sets, or SLACK_PACK_TARBALL), or a fresh pack of the built checkout. */
 function pack(): Packed {
   if (packed !== undefined) return packed
-  const given = process.env.SLACK_PACK_TARBALL
+  const given = process.env.PACK_TARBALL || process.env.SLACK_PACK_TARBALL
   if (given !== undefined && given !== "") {
     writeFileSync(join(work, basename(given)), readFileSync(given))
     packed = readTarball(given)
