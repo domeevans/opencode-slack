@@ -151,7 +151,7 @@ jobs:
           while IFS= read -r file; do sha256sum "$file" | sed "s#  .*/#  #"; done < "$list" > "$RUNNER_TEMP/SHA256SUMS"
           mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
           cat SHA256SUMS
-          node "$GITHUB_WORKSPACE/scripts/check-release-shape.mjs" --tag "$GITHUB_REF_NAME" --branch origin/master --verify github-api --notes "$RUNNER_TEMP/notes.md"
+          cd "$GITHUB_WORKSPACE" && node scripts/check-release-shape.mjs --tag "$GITHUB_REF_NAME" --branch origin/master --verify github-api --notes "$RUNNER_TEMP/notes.md"
         env:
           GH_TOKEN: ${{ github.token }}
       # Creates the Release, or, on a re-run, adds the kit's missing files. It never deletes or replaces an asset, and it
