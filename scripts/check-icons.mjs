@@ -1,10 +1,19 @@
 #!/usr/bin/env node
 // check-icons.mjs -- the icon contract for the @joe-broadhead OpenCode plugins.
 //
-// Contract: CONTRACT.md revision 1 (2026-11-06), in the family's icon kit
+// Contract: CONTRACT.md revision 2 (2026-11-12), in the family's icon kit
 //   (the family's shared icon set). Copy this file verbatim into a plugin as
 //   scripts/check-icons.mjs; do not edit the copy. check-icons-copy.mjs in the
 //   kit verifies a copy is byte-identical.
+//
+// Revision 2 adds one opt-in, `opencode.vendor.mark: true`, for a package whose
+//   icon.svg is the vendor's own mark, shipped as the vendor publishes it, under
+//   the vendor's brand guidelines. For such a package the family tile rule does
+//   not apply: the root must be a square viewBox of any size (the vendor's own),
+//   path numbers are bounded by 4 x that viewBox width, and README.md must say
+//   "not affiliated with <vendor.name>" and carry a trademark line. Every other
+//   rule, and the sanitizer block below, is unchanged. Without `mark`, the
+//   family rules are exactly revision 1's.
 //
 // The sanitizer below is Jelly's, copied from
 //   protocol/contracts/src/plugin-icon.ts  (function cleanPluginIcon, lines
@@ -34,7 +43,7 @@ import { createHash } from "node:crypto"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-const CONTRACT_REVISION = 1
+const CONTRACT_REVISION = 2
 const SELF = fileURLToPath(import.meta.url)
 
 // >>> SHARED: plugin-icon.ts + plugin-icon.test.ts >>>
@@ -231,7 +240,7 @@ function sanitizerProblems() {
 
 // <<< SHARED: plugin-icon.ts + plugin-icon.test.ts <<<
 
-// --- the contract, revision 1 ----------------------------------------------
+// --- the contract, revision 2 ----------------------------------------------
 
 const CANVAS = 48
 const RADIUS = 11
@@ -381,6 +390,8 @@ const root = argDir ? path.resolve(argDir) : process.cwd()
 const manifestPath = path.join(root, "package.json")
 
 let manifest = null
+let vendorMark = false
+let vendorName = ""
 try {
   manifest = JSON.parse(readFileSync(manifestPath, "utf8"))
 } catch (error) {
@@ -457,6 +468,8 @@ if (manifest) {
   }
 
   // opencode.vendor: only for a vendor's service, and then a bare domain.
+  vendorMark = opencode?.vendor?.mark === true && !OWN_PACKAGES.has(manifest.name)
+  vendorName = typeof opencode?.vendor?.name === "string" ? opencode.vendor.name.trim() : ""
   if (opencode && "vendor" in opencode) {
     const vendor = opencode.vendor
     if (OWN_PACKAGES.has(manifest.name))
@@ -465,8 +478,10 @@ if (manifest) {
       bad('opencode.vendor: it must be an object, such as { "id": "notion", "name": "Notion", "domain": "notion.so" }.')
     } else {
       for (const key of Object.keys(vendor)) {
-        if (!["id", "name", "domain"].includes(key)) bad(`opencode.vendor: "${key}" is not part of the declaration.`)
+        if (!["id", "name", "domain", "mark"].includes(key)) bad(`opencode.vendor: "${key}" is not part of the declaration.`)
       }
+      if ("mark" in vendor && vendor.mark !== true)
+        bad('opencode.vendor.mark: it must be true (the icon is the vendor\'s own mark) or left out.')
       if (typeof vendor.id !== "string" || !VENDOR_ID.test(vendor.id))
         bad(`opencode.vendor.id: ${JSON.stringify(vendor.id)}; it must be lowercase, such as "notion".`)
       if (typeof vendor.name !== "string" || vendor.name.trim() === "")
@@ -497,6 +512,8 @@ try {
 } catch {
   bad(`${ICON_PATH}: missing.`)
 }
+
+let markCanvas = CANVAS
 
 if (svgText !== null) {
   const bytes = Buffer.byteLength(svgText, "utf8")
@@ -531,15 +548,20 @@ if (svgText !== null) {
   if (viewBox === undefined) bad(`${ICON_PATH}: the root has no viewBox.`)
   else {
     const parts = viewBox.trim().split(/[\s,]+/u).map(Number)
-    const square = parts.length === 4 && parts[2] === parts[3]
+    const square = parts.length === 4 && parts.every(Number.isFinite) && parts[2] === parts[3] && parts[2] > 0
     if (!square) bad(`${ICON_PATH}: viewBox "${viewBox}" is not square; the family canvas is square.`)
-    else if (parts[2] !== CANVAS) bad(`${ICON_PATH}: viewBox is "${viewBox}"; the family canvas is "0 0 ${CANVAS} ${CANVAS}".`)
+    else if (vendorMark) {
+      if (parts[0] !== 0 || parts[1] !== 0) bad(`${ICON_PATH}: viewBox "${viewBox}" must start at 0 0.`)
+      markCanvas = parts[2]
+    } else if (parts[2] !== CANVAS) bad(`${ICON_PATH}: viewBox is "${viewBox}"; the family canvas is "0 0 ${CANVAS} ${CANVAS}".`)
   }
 
   // The tile: one opaque rect covering the canvas, at the family corner radius.
   const body = (cleanPluginIcon(doc) ?? doc).replace(/^<svg\b[^>]*>/u, "")
   const tile = /^<rect\s([^>]*?)\/?>/u.exec(body)
-  if (!tile) bad(`${ICON_PATH}: the first element must be the tile <rect>.`)
+  if (vendorMark) {
+    // The vendor's own mark: shipped as the vendor publishes it, so no family tile is required.
+  } else if (!tile) bad(`${ICON_PATH}: the first element must be the tile <rect>.`)
   else {
     const attr = (name) => new RegExp(`(?:^|\\s)${name}="([^"]*)"`, "u").exec(tile[1])?.[1]
     if (attr("width") !== String(CANVAS) || attr("height") !== String(CANVAS))
@@ -554,8 +576,25 @@ if (svgText !== null) {
   const numbers = [...(cleanPluginIcon(doc) ?? doc).matchAll(/(?:^|\s)(?:d|points)="([^"]*)"/gu)]
     .flatMap((m) => m[1].match(/-?\d*\.?\d+(?:e-?\d+)?/gu) ?? [])
     .map(Number)
-  const outside = numbers.find((n) => Math.abs(n) > CANVAS * 4)
-  if (outside !== undefined) bad(`${ICON_PATH}: a path coordinate ${outside} is far outside the ${CANVAS}x${CANVAS} canvas.`)
+  const outside = numbers.find((n) => Math.abs(n) > markCanvas * 4)
+  if (outside !== undefined) bad(`${ICON_PATH}: a path coordinate ${outside} is far outside the ${markCanvas}x${markCanvas} canvas.`)
+}
+
+// --- 2b. a vendor's own mark carries its notice -----------------------------
+
+if (vendorMark && vendorName !== "") {
+  let readme = null
+  try {
+    readme = readFileSync(path.join(root, "README.md"), "utf8")
+  } catch {
+    bad("README.md: missing; a package that ships the vendor's own mark must say it is unofficial and carry a trademark line.")
+  }
+  if (readme !== null) {
+    if (!readme.toLowerCase().includes(`not affiliated with ${vendorName.toLowerCase()}`))
+      bad(`README.md: it must say "not affiliated with ${vendorName}", because the icon is the vendor's own mark.`)
+    if (!/\btrademark\b/iu.test(readme))
+      bad(`README.md: it must carry a trademark line, such as "${vendorName} is a trademark of <its owner>.", because the icon is the vendor's own mark.`)
+  }
 }
 
 // --- 3. the rasters --------------------------------------------------------
