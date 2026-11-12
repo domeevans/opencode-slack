@@ -28,7 +28,7 @@ type UsedContext = {
   readonly agent: Pick<Context["agent"], "transform" | "list" | "get">
   readonly tool: Pick<Context["tool"], "list" | "transform">
   readonly rpc: Pick<Context["rpc"], "register">
-  readonly permission: Pick<Context["permission"], "hook">
+  readonly permission: Pick<Context["permission"], "hook" | "assert">
   readonly command: Pick<Context["command"], "transform">
   readonly session: Pick<Context["session"], "synthetic" | "get">
   readonly skill: Pick<Context["skill"], "transform" | "list">
@@ -173,6 +173,8 @@ export function fakeHost(input: FakeHostInput = {}) {
   // Every registered RPC contract by ID.
   const contracts = new Map<string, { methods: Record<string, { input: unknown; output: unknown }> }>()
   const hooks = new Set<unknown>()
+  // Every permission check a plugin-owned tool made, in order. The fake allows each one.
+  const asserted: unknown[] = []
   // Code Mode namespace descriptions, by name, and the plugin's own tools.
   const namespaces = new Map<string, Namespace>()
   const tools: { name: string; options?: unknown; execute: (input: unknown, context: unknown) => Promise<unknown> }[] = []
@@ -270,6 +272,7 @@ export function fakeHost(input: FakeHostInput = {}) {
         hooks.add(callback)
         return { dispose: async () => void hooks.delete(callback) }
       }) as never,
+      assert: (async (check: unknown) => void asserted.push(check)) as never,
     },
     command: {
       transform: async (callback) => {
@@ -354,6 +357,7 @@ export function fakeHost(input: FakeHostInput = {}) {
     rpcs,
     contracts,
     hooks,
+    asserted,
     namespaces,
     tools,
     script,

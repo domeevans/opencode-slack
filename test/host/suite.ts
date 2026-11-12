@@ -216,11 +216,15 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         sessions.unconfigured = await create({ agent: "build" }, "connect")
       }, 60_000)
 
-      test("describes every known tool with its class and live schema, and events_list; no unknown tool is a method", async () => {
+      test("describes every known tool with its class and live schema, and the plugin's own methods; no unknown tool is a method", async () => {
         const { value } = await script("describe", {})
         expect(value.id).toBe(TOOLS_RPC_ID)
-        expect(value.methods.map((method: { name: string }) => method.name)).toEqual([...METHODS.map((method) => method.name), "events_list"])
-        expect(value.methods.at(-1)).toMatchObject({ name: "events_list", kind: "plugin", class: "read", action: "slack_events_list", available: true })
+        expect(value.methods.map((method: { name: string }) => method.name)).toEqual([...METHODS.map((method) => method.name), "events_list", "mark_read", "status"])
+        expect(value.methods.slice(-3)).toMatchObject([
+          { name: "events_list", kind: "plugin", class: "read", action: "slack_events_list", available: true },
+          { name: "mark_read", kind: "plugin", class: "write", action: "slack_mark_read", available: true },
+          { name: "status", kind: "plugin", class: "read", action: "slack_status", available: true },
+        ])
         for (const method of value.methods.filter((item: { kind: string }) => item.kind === "mcp")) {
           const expected = METHODS.find((entry) => entry.name === method.name)!
           expect({ name: method.name, tool: method.tool, kind: method.kind, class: method.class, action: method.action, available: method.available, input: method.input })
@@ -291,7 +295,7 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
 
       test("describe with a session reports each method's permission; without one it omits it", async () => {
         const { value } = await script("describe", { sessionID: sessions.build })
-        const expected = Object.fromEntries([...METHODS.map((method) => [method.name, "allow"]), ["events_list", "allow"]])
+        const expected = Object.fromEntries([...METHODS.map((method) => [method.name, "allow"]), ["events_list", "allow"], ["mark_read", "allow"], ["status", "allow"]])
         expect(Object.fromEntries(value.methods.map((method: { name: string; permission: string }) => [method.name, method.permission]))).toEqual(expected)
         const plain = (await script("describe", {})).value
         expect(plain.methods.every((method: object) => !Object.hasOwn(method, "permission"))).toBe(true)
@@ -362,7 +366,10 @@ export function hostSuite(name: string, start: () => Promise<Host>): void {
         expect(refused).toMatchObject({ type: "failed", code: "CLIENT_ID_MISSING" })
         expect(refused.message).toContain(`CLIENT_ID_MISSING: the "slack" server is not registered. Next step: ${next}`)
         const { value } = await script("describe", {}, "connect")
-        expect(value.methods.every((method: { available: boolean; reason: string }) => !method.available && method.reason === "CLIENT_ID_MISSING")).toBe(true)
+        // status is the one method that still answers: it is what explains the missing client ID.
+        const others = value.methods.filter((method: { name: string }) => method.name !== "status")
+        expect(others.every((method: { available: boolean; reason: string }) => !method.available && method.reason === "CLIENT_ID_MISSING")).toBe(true)
+        expect(value.methods.find((method: { name: string }) => method.name === "status")).toMatchObject({ available: true })
       })
 
       test("names an unknown session, a session without an agent, and rejects an envelope with extra keys", async () => {

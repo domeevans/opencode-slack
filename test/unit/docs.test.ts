@@ -101,8 +101,9 @@ describe("the skill and the docs", () => {
 
 describe("tool names and files the text names", () => {
   // `slack_*` is the catch-all rule, and `slack_<tool>` a pattern; `slack_archive` is the docs' example of another
-  // server's tool that the catch-all also matches; `slack_events_list` is the plugin's own tool.
-  const NOT_TOOLS = new Set(["slack_", "slack_archive", "slack_events_list"])
+  // server's tool that the catch-all also matches; `slack_events_list` and `slack_mark_read` are the plugin's own tools,
+  // and `slack_status` the tools RPC status method's permission action.
+  const NOT_TOOLS = new Set(["slack_", "slack_archive", "slack_events_list", "slack_mark_read", "slack_status"])
 
   test("every slack_ tool named in the skill and the docs is one of Slack's, after one permission prefix", () => {
     const named = FILES.flatMap((file) => [...read(file).matchAll(/`(slack_[a-z_]*)/g)].map((match) => ({ file, name: match[1]! })))
@@ -155,8 +156,8 @@ describe("the catalog the fake Slack server serves", () => {
     expect(names.filter((name) => classify(name) === "unknown")).toEqual([])
     for (const name of names) expect({ name, type: SLACK_SCHEMAS[name]!.type }).toEqual({ name, type: "object" })
     const jelly = JSON.parse(read("package.json")) as { jelly: { tools: { name: string }[] } }
-    // Every tool Slack lists is declared, and the plugin's own events_list.
-    expect(jelly.jelly.tools.map((tool) => tool.name.replace(/^slack\./, "")).sort()).toEqual([...names, "events_list"].sort())
+    // Every tool Slack lists is declared, and the plugin's own events_list and mark_read.
+    expect(jelly.jelly.tools.map((tool) => tool.name.replace(/^slack\./, "")).sort()).toEqual([...names, "events_list", "mark_read"].sort())
   })
 })
 

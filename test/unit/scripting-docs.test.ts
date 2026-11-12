@@ -5,12 +5,20 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { EVENTS_INPUT } from "../../src/events.js"
 import { METHODS, TOOLS_RPC_ID } from "../../src/host/tools-rpc.js"
+import { MARK_READ_INPUT } from "../../src/mark-read.js"
 import { parameters, SLACK_SCHEMAS } from "../host/slack-catalog.js"
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url))
 const FILES = ["docs/scripting.md", "README.md"]
 const METHODS_BY_NAME = new Map(METHODS.map((method) => [method.name, method]))
+/** The plugin's own methods, which setup registers beside the MCP ones, with their input schemas. */
+const OWN_INPUTS: Readonly<Record<string, { properties: Record<string, unknown>; required?: readonly string[] }>> = {
+  events_list: EVENTS_INPUT as never,
+  mark_read: MARK_READ_INPUT as never,
+  status: { properties: {}, required: [] },
+}
 
 interface Example {
   readonly file: string
@@ -80,7 +88,7 @@ describe("the scripting examples", () => {
   test.each(examples)("$file:$line calls $method with this plugin's RPC id and a real method", (example) => {
     expect(example.statement).toContain("/api/rpc/slack.workspace.tools/")
     expect(TOOLS_RPC_ID).toBe("slack.workspace.tools")
-    expect(example.method === "describe" || METHODS_BY_NAME.has(example.method)).toBe(true)
+    expect(example.method === "describe" || METHODS_BY_NAME.has(example.method) || Object.hasOwn(OWN_INPUTS, example.method)).toBe(true)
   })
 
   test.each(examples)("$file:$line sends the location header", (example) => {
@@ -100,10 +108,16 @@ describe("the scripting examples", () => {
   })
 
   test.each(examples.filter((example) => example.method !== "describe"))("$file:$line names only fields $method accepts", (example) => {
+    const input = (inputOf(example.body) ?? {}) as Record<string, unknown>
+    const own = OWN_INPUTS[example.method]
+    if (own !== undefined) {
+      for (const key of Object.keys(input)) expect({ key, known: Object.hasOwn(own.properties, key) }).toEqual({ key, known: true })
+      for (const key of own.required ?? []) expect({ key, given: key in input }).toEqual({ key, given: true })
+      return
+    }
     const method = METHODS_BY_NAME.get(example.method)!
     expect(method.kind).toBe("mcp")
     const schema = SLACK_SCHEMAS[example.method]!
-    const input = (inputOf(example.body) ?? {}) as Record<string, unknown>
     for (const key of Object.keys(input)) expect({ key, known: parameters(example.method).includes(key) }).toEqual({ key, known: true })
     for (const key of schema.required as readonly string[]) expect({ key, given: key in input }).toEqual({ key, given: true })
   })

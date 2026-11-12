@@ -266,6 +266,12 @@
         "permission": "slack_slack_update_list_record",
         "effect": "allow",
         "readOnly": false
+      },
+      {
+        "name": "slack.mark_read",
+        "permission": "slack_mark_read",
+        "effect": "allow",
+        "readOnly": false
       }
     ],
     "skills": [

@@ -28,7 +28,11 @@ const status = object({
   unguardedAgents: texts,
   host: object({ version: { type: ["string", "null"] }, range: text, tested: { type: "boolean" } }, ["version", "range", "tested"]),
   shadowedSkills: { type: "array", items: object({ id: text, path: text }, ["id", "path"]) },
+  account: object({ teamId: text, userId: text, enterpriseId: text }, ["teamId", "userId"]),
 }, ["version", "state", "access", "message", "nextStep", "server", "asksBefore", "tools", "unguardedAgents", "host", "shadowedSkills"])
+
+/** The status model's JSON Schema, which the tools RPC's `status` method returns too. */
+export const STATUS_SCHEMA = status
 
 /** The status contract shared by the server, the TUI view and other clients. */
 export const SlackRpc = Rpc.define({

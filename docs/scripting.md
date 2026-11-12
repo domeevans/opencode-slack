@@ -10,11 +10,20 @@ A script can call every Slack tool this plugin knows, with no model: a cron job,
 | send | `slack_send_message`, `slack_send_message_draft`, `slack_schedule_message` |
 | write | `slack_create_canvas`, `slack_update_canvas`, `slack_add_reaction`, `slack_get_file_upload_url`, `slack_complete_file_upload`, `slack_create_conversation`, `slack_create_list`, `slack_update_list`, `slack_add_list_record`, `slack_update_list_record` |
 | events | `events_list`: `slack_events_list`, the messages posted since a cursor in the channels of the `events.channels` option, as Memory's events ([configuration](configuration.md#events-list)) |
+| write (the plugin's own) | `mark_read`: `slack_mark_read`, marks a conversation read up to a message with Slack's `conversations.mark` ([configuration](configuration.md#mark-as-read)) |
+| `status` | read: the status model of `/slack-status`, with the signed-in account's `teamId`, `userId` and `enterpriseId` while connected ([configuration](configuration.md#status-and-rpc)). Its permission action, `slack_status`, is allowed at every `access` value, so it answers when nothing else can |
 | `describe` | not a tool: lists the methods, their classes and permission actions, whether OpenCode lists each tool now, each tool's input as JSON Schema, and — with a session — that session's permission for each |
 
 The class is the worst thing a tool can do. It never decides whether a call runs: the rules do. It is what `describe` reports and what a job's approval shows.
 
-Each method's permission name is the tool name with the server's prefix, `slack_`, for example `slack_slack_search_public`: Slack's own server already names its tools `slack_*`, so the doubled prefix is how the host scopes a rule to this server. Each method runs the tool with the same input: Slack's own tool, through OpenCode's own connection and sign-in. The plugin never sees the Slack token. A tool Slack adds later is not a method until it is classified in this plugin's table; `describe` lists it under `unclassified`, and `/slack-status` names it.
+Each method's permission name is the tool name with the server's prefix, `slack_`, for example `slack_slack_search_public`: Slack's own server already names its tools `slack_*`, so the doubled prefix is how the host scopes a rule to this server. Each MCP method runs the tool with the same input: Slack's own tool, through OpenCode's own connection and sign-in, which the plugin never sees. The plugin's own `status` and `mark_read` are the exceptions: the plugin reads the Slack sign-in's token in one module, `src/slack-api.ts`, only to call Slack's `auth.test` and `conversations.mark`; it never stores, caches, logs or returns it. A tool Slack adds later is not a method until it is classified in this plugin's table; `describe` lists it under `unclassified`, and `/slack-status` names it.
+`mark_read` runs `slack_mark_read`'s own spec the same way: it asserts `slack_mark_read`, then calls Slack's `conversations.mark` once. Its own refusals, `INPUT_INVALID` and `SCOPE_MISSING`, are in the configuration guide's [Errors](configuration.md#errors); Slack's other refusals are `UPSTREAM_ERROR` with Slack's error code.
+
+```sh
+opencode api post /api/rpc/slack.workspace.tools/mark_read -H "x-opencode-directory:$PWD" -d '{"input":{"sessionID":"ses_…","input":{"channel_id":"D0123ABCD45","ts":"1700000000.000100"}}}'
+opencode api post /api/rpc/slack.workspace.tools/status -H "x-opencode-directory:$PWD" -d '{"input":{"sessionID":"ses_…","input":{}}}'
+```
+
 `events_list` is the plugin's own read for Memory's collector. It runs `slack_events_list`'s own spec as the session and its agent: it asserts `slack_events_list`, then reads `slack_read_user_profile` and `slack_read_channel` through OpenCode's executors, so each read's rules apply. Its own refusals, such as a cursor from another workspace, are the codes in the configuration guide's [Errors](configuration.md#errors); a refused read is `PERMISSION_DENIED` naming that read.
 
 
@@ -104,6 +113,6 @@ OpenCode itself answers `rpc.invalid_input` for a body that is not the envelope 
 - Call a tool that Slack adds later, even with an allow rule, until this plugin classifies it.
 - Answer an approval prompt: under `access: "ask-changes"` an `ask` is refused. Under the default `"all"`, nothing asks.
 - Rely on a past "Always allow": it does not authorize an ad-hoc script.
-- Use a token: the plugin has none to give.
+- Use a token: the plugin never returns one.
 
 A script's calls write nothing to the session, and OpenCode's `execute.before` and `execute.after` tool hooks, from any plugin, do not run for them. Slack still records them in its audit logs, as it does for the model's calls.

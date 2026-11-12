@@ -4,6 +4,10 @@ import { registerAppIntegration, resolveClient, sameClient, serverNamer, type Cl
 import { isSupportedHost, isTestedHost } from "./host-version.js"
 import { METHODS, registerToolsRpc } from "./host/tools-rpc.js"
 import { eventsMethod, eventsTool, type EventsToolOptions } from "./events.js"
+import { workspaceIdentity } from "./identity.js"
+import { markReadMethod, markReadTool, type MarkReadOptions } from "./mark-read.js"
+import { slackApi } from "./slack-api.js"
+import { statusMethod } from "./status-method.js"
 import { parseOptions } from "./options.js"
 import { insertDefaultRules } from "./permissions.js"
 import { SlackRpc } from "./rpc.js"
@@ -60,6 +64,11 @@ export default Plugin.define({
     const events: EventsToolOptions | undefined = options === undefined
       ? undefined
       : { tool: ctx.tool, permission: ctx.permission, channels: options.channels, owned: () => !nameInUse, status: () => status() }
+    // The one Slack Web API client, the only code that reads the Slack token: auth.test for status's account, and
+    // conversations.mark for mark_read. It uses only the plugin's own server's sign-in.
+    const api = slackApi({ mcp: ctx.mcp, connection: ctx.integration.connection, owned: () => options !== undefined && !nameInUse })
+    const identity = workspaceIdentity(api)
+    const marking: MarkReadOptions | undefined = options === undefined ? undefined : { permission: ctx.permission, api, status: () => status() }
 
     if (options !== undefined) {
       const fromConnect = options.clientId === undefined
@@ -72,6 +81,7 @@ export default Plugin.define({
       await ctx.tool.transform((editor) => {
         editor.namespace({ name: SERVER, description: NAMESPACE_DESCRIPTION })
         editor.add(eventsTool(events!))
+        editor.add(markReadTool(marking!))
       })
       await ctx.agent.transform((editor) => insertDefaultRules(editor, options.access))
       const skills = await loadSkills()
@@ -99,7 +109,11 @@ export default Plugin.define({
           const events = ctx.event.subscribe({ types: ["integration.updated", "credential.updated", "credential.switched"], signal: stopped.signal })
           await forEach(events, stopped.signal, (event) => {
             if (event.type === "integration.updated") handle(() => namer.apply())
-            else if (fromConnect) handle(updateClient)
+            else {
+              if (fromConnect) handle(updateClient)
+              // A new Slack sign-in: read its account now, so the next status has it. Outside the queue: it may wait on Slack.
+              void identity.get().catch(() => undefined)
+            }
           }).catch(() => undefined)
           // The stream ended or failed: subscribe again.
           await delay(RESUBSCRIBE_MS, stopped.signal)
@@ -118,22 +132,30 @@ export default Plugin.define({
       }
     }
 
-    const status = async () => buildStatus({
-      version: VERSION,
-      hostVersion,
-      hostSupported,
-      hostTested,
-      parsed,
-      access: options?.access ?? "all",
-      active: options !== undefined,
-      nameInUse,
-      client,
-      servers: (await ctx.mcp.list()).data,
-      tools: await ctx.tool.list(),
-      agents: (await ctx.agent.list()).data,
-      // A skill list the host cannot give reports nothing shadowed, rather than failing status.
-      shadowedSkills: bundled.length === 0 ? [] : shadowedSkills(await ctx.skill.list().then((listed) => listed.data, () => []), bundled),
-    })
+    const status = async () => {
+      const servers = (await ctx.mcp.list()).data
+      // The account is read only while the plugin's own server is connected; a failure leaves it out.
+      const connected = options !== undefined && !nameInUse && client.client !== undefined
+        && servers.find((server) => server.name === SERVER)?.status.status === "connected"
+      const account = connected ? await identity.get().catch(() => undefined) : undefined
+      return buildStatus({
+        version: VERSION,
+        hostVersion,
+        hostSupported,
+        hostTested,
+        parsed,
+        access: options?.access ?? "all",
+        active: options !== undefined,
+        nameInUse,
+        client,
+        servers,
+        ...(account === undefined ? {} : { account }),
+        tools: await ctx.tool.list(),
+        agents: (await ctx.agent.list()).data,
+        // A skill list the host cannot give reports nothing shadowed, rather than failing status.
+        shadowedSkills: bundled.length === 0 ? [] : shadowedSkills(await ctx.skill.list().then((listed) => listed.data, () => []), bundled),
+      })
+    }
 
     await ctx.rpc.register(SlackRpc, {
       status: async (_input, call) => {
@@ -153,7 +175,9 @@ export default Plugin.define({
     const stopTools = options === undefined
       ? async () => {}
       : await registerToolsRpc(ctx, {
-        methods: events === undefined ? METHODS : [...METHODS, eventsMethod(events)],
+        methods: events === undefined || marking === undefined
+          ? METHODS
+          : [...METHODS, eventsMethod(events), markReadMethod(marking), statusMethod(() => status())],
         mcp: {
           server: SERVER,
           managed: () => !nameInUse,

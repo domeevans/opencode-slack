@@ -36,6 +36,10 @@ export const KNOWN_TOOLS: Readonly<Record<string, Exclude<ToolClass, "unknown">>
   slack_update_list_record: "write",
 }
 
+/** The plugin's own tools RPC methods beside `events_list`: its write `mark_read` and its `status`. */
+export const MARK_READ = "mark_read"
+export const STATUS_METHOD = "status"
+
 export const READ_TOOLS: readonly string[] = Object.keys(KNOWN_TOOLS).filter((tool) => KNOWN_TOOLS[tool] === "read")
 
 /** The writes that reach people, which the tools RPC reports as class `send`. */

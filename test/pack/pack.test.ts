@@ -209,7 +209,7 @@ describe.each(HOST_VERSIONS)("the installed package on stock opencode %s", (vers
       expect(build?.permissions.slice(at + 1, at + 1 + rules.length)).toEqual(rules)
       expect((await host.client.skill.list({ location })).data.map((skill) => skill.id)).toContain("slack-search")
       const tools = (await host.client.rpc.call({ rpcID: TOOLS_RPC_ID, method: "describe", location, input: {} })).output as { methods: { name: string }[] }
-      expect(tools.methods.map((method) => method.name)).toEqual([...METHODS.map((method) => method.name), "events_list"])
+      expect(tools.methods.map((method) => method.name)).toEqual([...METHODS.map((method) => method.name), "events_list", "mark_read", "status"])
       const paths = (await host.client.rpc.call({ rpcID: "slack.test.probe", method: "paths", location, input: {} })).output as Record<string, string>
       expect(Object.keys(paths).length).toBeGreaterThan(0)
       expect(Object.entries(paths).filter(([, path]) => !path.startsWith(host.root + sep))).toEqual([])

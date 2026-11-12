@@ -368,7 +368,7 @@ describe("formatStatus", () => {
     expect(formatStatus(status)).toBe([
       "Slack",
       "Connection: sign-in required. AUTH_REQUIRED: Sign in to Slack to use it in OpenCode.",
-      "Account: Slack shows the account on its sign-in page; OpenCode does not store it.",
+      "Account: Slack shows the account on its sign-in page.",
       'Access: Every tool runs without asking: reads, the private-channel search, files, writes, sends and new Slack tools. Set the access option to "ask-changes" or "read-only" to restrict it, or add a later rule.',
       "Server: slack at https://mcp.slack.com/mcp",
       "Client: C1 (public, PKCE; set in plugin options)",
@@ -394,6 +394,22 @@ describe("formatStatus", () => {
     expect(lines.filter((line) => line.startsWith("Next step: "))).toEqual([`Next step: ${status.nextStep}`])
     expect(lines.at(-1)).toBe(`Next step: ${status.nextStep}`)
     expect(lines.filter((line) => line.startsWith("Client: ")).length).toBe(given.parsed.ok && given.active && given.client.client !== undefined ? 1 : 0)
+  })
+
+  test("the Account row names the signed-in workspace and user, and the Enterprise Grid organisation when there is one", () => {
+    const account = { teamId: "T0TEAM0001", userId: "U0USER0001" }
+    expect(formatStatus(buildStatus(input({ account })))).toContain("Account: workspace T0TEAM0001, user U0USER0001\n")
+    expect(formatStatus(buildStatus(input({ account: { ...account, enterpriseId: "E0GRID0001" } }))))
+      .toContain("Account: workspace T0TEAM0001, user U0USER0001, Enterprise Grid E0GRID0001\n")
+  })
+
+  test("an account is shown only while connected", () => {
+    const account = { teamId: "T0TEAM0001", userId: "U0USER0001" }
+    expect(buildStatus(input({ account })).account).toEqual(account)
+    for (const [label, given] of STATES) {
+      const status = buildStatus({ ...given, account })
+      expect({ label, account: status.account }).toEqual({ label, account: status.state === "connected" ? account : undefined })
+    }
   })
 
   test("a confidential client from /connect says a secret is set and where it was saved", () => {
@@ -440,6 +456,15 @@ describe("the status RPC contract", () => {
       expect(problems(status, output)).toEqual([])
       expect(JSON.parse(JSON.stringify(status))).toEqual(status)
       expect(isStatus(status)).toBe(true)
+    }
+  })
+
+  test("a status with the account, with and without an Enterprise Grid organisation, matches the output schema", () => {
+    for (const account of [{ teamId: "T0TEAM0001", userId: "U0USER0001" }, { teamId: "T0TEAM0001", userId: "U0USER0001", enterpriseId: "E0GRID0001" }]) {
+      const status = buildStatus(input({ account }))
+      expect(status.account).toEqual(account)
+      expect(problems(status, output)).toEqual([])
+      expect(JSON.parse(JSON.stringify(status))).toEqual(status)
     }
   })
 

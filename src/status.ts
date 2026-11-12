@@ -1,12 +1,13 @@
 import type { PluginCode } from "./codes.js"
 import { APP_NAME, SERVER_DISPLAY_NAME, type ClientState } from "./connect.js"
 import { EVENTS_LIST } from "./host/events-list.js"
+import type { Identity } from "./identity.js"
 import { APP_MANIFEST_URL, SERVER, SLACK_MCP_URL, SUPPORTED_HOST_RANGE } from "./defaults.js"
 import type { ParsedOptions } from "./options.js"
 import type { Access } from "./options.js"
 import { defaultRules, unguardedAgents as unguardedOf, type Rule } from "./permissions.js"
 import type { ListedSkill } from "./skills.js"
-import { classify } from "./tools.js"
+import { classify, MARK_READ } from "./tools.js"
 
 /** The shared status labels in machine form; `/slack-status` shows them as `sign-in required` and so on. */
 type State =
@@ -55,6 +56,11 @@ export interface Status {
   readonly host: { readonly version: string | null; readonly range: string; readonly tested: boolean }
   /** User or project skills with a bundled skill's id, which OpenCode loads instead of the bundled one. */
   readonly shadowedSkills: readonly ListedSkill[]
+  /**
+   * The signed-in Slack workspace and user, from Slack's `auth.test`, while connected. Absent when not connected or
+   * when Slack did not answer; never an error.
+   */
+  readonly account?: Identity
 }
 
 export type ServerStatus =
@@ -79,6 +85,8 @@ export interface StatusInput {
   readonly tools: readonly { readonly name: string; readonly options?: { readonly namespace?: string } }[]
   readonly agents: readonly { readonly id: string; readonly permissions: readonly Rule[] }[]
   readonly shadowedSkills: readonly ListedSkill[]
+  /** The signed-in account, when it is known; status shows it only while connected. */
+  readonly account?: Identity
 }
 
 /** What `/slack-status` and the RPC error say when the host cannot answer. */
@@ -182,8 +190,8 @@ function connection(status: ServerStatus | undefined, unguarded: readonly string
 export function buildStatus(input: StatusInput): Status {
   const options = input.parsed.ok ? input.parsed.options : undefined
   const host = { version: input.hostVersion === "" ? null : input.hostVersion, range: SUPPORTED_HOST_RANGE, tested: input.hostTested }
-  // slack_events_list is the plugin's own tool in the server's namespace, not one Slack lists.
-  const names = input.tools.filter((tool) => tool.options?.namespace === SERVER && tool.name !== EVENTS_LIST).map((tool) => tool.name)
+  // slack_events_list and slack_mark_read are the plugin's own tools in the server's namespace, not ones Slack lists.
+  const names = input.tools.filter((tool) => tool.options?.namespace === SERVER && tool.name !== EVENTS_LIST && tool.name !== MARK_READ).map((tool) => tool.name)
   const unknown = names.filter((name) => classify(name) === "unknown").sort()
   const tools = {
     read: names.filter((name) => classify(name) === "read").length,
@@ -243,7 +251,10 @@ export function buildStatus(input: StatusInput): Status {
     }
   }
   const status = input.servers.find((item) => item.name === SERVER)?.status
-  return { ...base, ...connection(status, unguardedAgents, input.shadowedSkills, names.length) }
+  const connected = connection(status, unguardedAgents, input.shadowedSkills, names.length)
+  if (connected.state !== "connected" || input.account === undefined) return { ...base, ...connected }
+  const { teamId, userId, enterpriseId } = input.account
+  return { ...base, ...connected, account: { teamId, userId, ...(enterpriseId === undefined ? {} : { enterpriseId }) } }
 }
 
 /** The next step while no usable Slack app client ID is set: status's, and the tools RPC's for CLIENT_ID_MISSING. */
@@ -265,6 +276,12 @@ function unknownTools(tools: Status["tools"], access: Access): string {
   const more = tools.unknown - tools.unknownNames.length
   if (tools.unknownNames.length === 0) return `; ${tools.unknown} unknown (${posture})`
   return `; ${tools.unknown} unknown (${posture}): ${tools.unknownNames.join(", ")}${more > 0 ? ` and ${more} more` : ""}`
+}
+
+/** The Account row: the workspace and user ids while known, otherwise where Slack shows them. */
+function accountText(account: Identity | undefined): string {
+  if (account === undefined) return "Slack shows the account on its sign-in page."
+  return `workspace ${account.teamId}, user ${account.userId}${account.enterpriseId === undefined ? "" : `, Enterprise Grid ${account.enterpriseId}`}`
 }
 
 const CLIENT_SOURCE = { options: "set in plugin options", connect: "saved in /connect" } as const
@@ -290,7 +307,7 @@ export function statusRows(status: Status): { readonly label: string; readonly v
       label: "Connection",
       value: `${stateLabel(status)}. ${status.code === undefined ? "" : `${status.code}: `}${status.message}${status.detail === undefined ? "" : ` ${status.detail}`}`,
     },
-    { label: "Account", value: "Slack shows the account on its sign-in page; OpenCode does not store it." },
+    { label: "Account", value: accountText(status.account) },
     { label: "Access", value: accessText(status) },
     { label: "Server", value: `${status.server.name} at ${status.server.url}` },
   ]

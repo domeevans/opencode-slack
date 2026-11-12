@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Status's `account` (`teamId`, `userId`, `enterpriseId`), from one `auth.test` per sign-in; absent on failure. Shown in the `Account` row.
+- The tools RPC's `status` method (`slack_status`, allowed at every `access`).
+- `slack_mark_read` / `mark_read` (write): Slack's `conversations.mark`. Needs a `:write` scope; `SCOPE_MISSING` without it. Default scopes unchanged.
+
+### Changed
+
+- **The plugin reads the Slack token in one place**, `src/slack-api.ts`, only for `auth.test` and `conversations.mark`, and never stores, logs or returns it.
+
 ## [0.0.0] - 2026-11-10
 <!-- kit-release: the GitHub release v0.0.0 -->
 
