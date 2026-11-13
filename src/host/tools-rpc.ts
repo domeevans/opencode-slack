@@ -45,7 +45,9 @@ export const PLUGIN_ID = "slack.workspace"
  * `SEND_TOOLS` are `send`; every other write is `write`. The class never decides whether a call runs: the session's
  * rules do, and at the default `access: "all"` they allow every method. Setup registers the plugin's own methods
  * beside these: `events_list` (`slack_events_list`, class `read`), `mark_read` (`slack_mark_read`, class `write`, which
- * calls Slack's `conversations.mark` through `src/slack-api.ts`) and `status` (`slack_status`, class `read`).
+ * calls Slack's `conversations.mark` through `src/slack-api.ts`), `status` (`slack_status`, class `read`), and the
+ * structured reads `mentions_list` and `dms_list` (`slack_mentions_list`, `slack_dms_list`, class `read`, which call
+ * Slack's Web API through `src/slack-api.ts`).
  */
 export const METHODS: readonly MethodSpec[] = Object.entries(KNOWN_TOOLS).map(([name, toolClass]): MethodSpec => ({
   kind: "mcp",

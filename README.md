@@ -63,6 +63,15 @@ The Slack tools are Slack's own. With Code Mode, which is on by default, agents 
 
 `slack_mark_read` (script method `mark_read`) marks a conversation read up to a message, with Slack's `conversations.mark`. It is a write, and needs the conversation type's `:write` scope, which the default scopes lack: see [Mark as read](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#mark-as-read).
 
+### Mentions and direct messages as JSON
+
+Slack's own tools answer in Markdown. Two of the plugin's own reads answer in JSON, for scripts and apps that need fields:
+
+- `slack_mentions_list` (script method `mentions_list`): the messages that mention the signed-in user since a time, newest first, with channel, author, text, permalink and time. It searches with Slack's `assistant.search.context` for the user's own `<@U…>`, taken from status's account, so a script need not know who is signed in.
+- `slack_dms_list` (script method `dms_list`): the user's direct and group messages with their members, their latest message and whether it is unread, newest first.
+
+Both are reads that, like the private search, reach direct messages and private channels: they run at `all`, ask at `ask-changes` and are denied at `read-only`. They need the private search's scopes and the direct-message read scopes: see [Mentions and direct messages](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#mentions-and-direct-messages).
+
 ### Scripts
 
 A script or a cron job can call every Slack tool this plugin knows with no model, through `opencode api`: the fourteen reads, the three sends and the ten writes. It runs as a session and its agent, under that agent's permission rules and the session's own. The rule is resolved first, so only an `allow` runs. **A script gets the same default as the model:** at `access: "all"` the plugin's block allows every tool, so a script can read and write everything the account can. Set `access: "ask-changes"` or `"read-only"`, or add a later rule, to restrict it; an `ask` is refused because no one can answer it. A saved "Always allow" does not authorize an ad-hoc script; a Jobs `jobs_run_script` one-off does, with the user's approval:
@@ -77,7 +86,7 @@ Without `x-opencode-directory:$PWD` the call reaches the service's default locat
 
 See [Scripting](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/scripting.md).
 
-The methods `events_list` and `mark_read` run `slack_events_list` and `slack_mark_read` the same way, and `status` returns the status model, the signed-in account included. See [Scripting](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/scripting.md).
+The methods `events_list`, `mark_read`, `mentions_list` and `dms_list` run `slack_events_list`, `slack_mark_read`, `slack_mentions_list` and `slack_dms_list` the same way, and `status` returns the status model, the signed-in account included. See [Scripting](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/scripting.md).
 
 ## Permissions
 
@@ -220,7 +229,7 @@ Run `/slack-status` (or `/slack` in the TUI) first. Its `Connection` row shows a
 | — | `STATUS_UNAVAILABLE` | Status itself could not be read. | Run `/slack-status` again in a moment. |
 | — | `SKILLS_INVALID` | A bundled skill is missing or has invalid frontmatter, so the plugin does not load. | Reinstall the plugin: `opencode plugin remove github:joe-broadhead/opencode-slack#v0.0.0`, then `opencode plugin add github:joe-broadhead/opencode-slack#v0.0.0`, then `opencode reload`. |
 | — | `INPUT_INVALID` | A plugin tool's input is invalid; the message names the problems. | Pass the fields its schema describes. |
-| — | `SCOPE_MISSING` | `mark_read` lacks the `:write` scope the message names. | Add it to the app and `oauth.scopes`, then sign in again. |
+| — | `SCOPE_MISSING` | `mark_read` lacks the `:write` scope the message names, or `mentions_list` or `dms_list` lacks the read scope it names. | Add it to the app and `oauth.scopes`, then sign in again. |
 | — | `SOURCE_UNKNOWN` | This plugin lists only the source `slack`. | Leave `source` out, or pass `slack`. |
 | — | `CURSOR_INVALID` | The cursor was not issued by `events_list` for this Slack workspace and sign-in. | Call `events_list` without a cursor, with `since`, to start again. |
 | — | `ACCOUNT_UNKNOWN` | The signed-in Slack workspace is not the account `events_list` was asked for. | Leave `account` out, or pass the signed-in workspace. |
@@ -265,7 +274,7 @@ Sign out while the plugin is still installed: once it is removed, OpenCode no lo
 
 ## Known limits
 
-- **Slack's server and Slack's tools.** The plugin adds Slack's hosted MCP server and no wrapper tools; its only Web API calls are `auth.test` and `conversations.mark`. Tool schemas, results (Markdown text, not JSON) and rate limits are Slack's.
+- **Slack's server and Slack's tools.** The plugin adds Slack's hosted MCP server and no wrapper tools; its only Web API calls are `auth.test`, `conversations.mark` and the reads of `mentions_list` and `dms_list`. Tool schemas, results (Markdown text, not JSON) and rate limits are Slack's.
 - **The default `access` is `all`.** Agents can then read private channels and files, and send or change things, without asking. Set `access` to `"ask-changes"` or `"read-only"` to restrict it; see [Permissions](#permissions).
 - **Tool classes are set by hand.** A tool Slack adds later runs under the namespace rule (allowed at `all`, asks at `ask-changes`, denied at `read-only`) and is not a script method until the plugin classifies it. `/slack-status` names such tools.
 - **Private search needs scopes the default sign-in lacks.** With the default scopes, Slack answers `missing_scope` for it. See the [scope table](https://github.com/joe-broadhead/opencode-slack/blob/HEAD/docs/configuration.md#scopes).

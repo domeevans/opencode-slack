@@ -7,7 +7,7 @@ import type { ParsedOptions } from "./options.js"
 import type { Access } from "./options.js"
 import { defaultRules, unguardedAgents as unguardedOf, type Rule } from "./permissions.js"
 import type { ListedSkill } from "./skills.js"
-import { classify, MARK_READ } from "./tools.js"
+import { classify, DMS_LIST, MARK_READ, MENTIONS_LIST } from "./tools.js"
 
 /** The shared status labels in machine form; `/slack-status` shows them as `sign-in required` and so on. */
 type State =
@@ -190,8 +190,10 @@ function connection(status: ServerStatus | undefined, unguarded: readonly string
 export function buildStatus(input: StatusInput): Status {
   const options = input.parsed.ok ? input.parsed.options : undefined
   const host = { version: input.hostVersion === "" ? null : input.hostVersion, range: SUPPORTED_HOST_RANGE, tested: input.hostTested }
-  // slack_events_list and slack_mark_read are the plugin's own tools in the server's namespace, not ones Slack lists.
-  const names = input.tools.filter((tool) => tool.options?.namespace === SERVER && tool.name !== EVENTS_LIST && tool.name !== MARK_READ).map((tool) => tool.name)
+  // slack_events_list, slack_mark_read, slack_mentions_list and slack_dms_list are the plugin's own tools in the
+  // server's namespace, not ones Slack lists.
+  const own = [EVENTS_LIST, MARK_READ, MENTIONS_LIST, DMS_LIST]
+  const names = input.tools.filter((tool) => tool.options?.namespace === SERVER && !own.includes(tool.name)).map((tool) => tool.name)
   const unknown = names.filter((name) => classify(name) === "unknown").sort()
   const tools = {
     read: names.filter((name) => classify(name) === "read").length,

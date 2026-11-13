@@ -118,8 +118,13 @@ describe("the Slack Web API client", () => {
     expect(result).toEqual({ ok: false, error: REQUEST_FAILED })
   })
 
-  test("a rate limit is Slack's ratelimited", async () => {
+  test("a rate limit is Slack's ratelimited, with the seconds Slack's Retry-After asks for", async () => {
     const { fetch } = fakeFetch(() => new Response("", { status: 429, headers: { "retry-after": "30" } }))
+    expect(await slackApi(sources({}, fetch)).call("auth.test", {})).toEqual({ ok: false, error: "ratelimited", retryAfter: 30 })
+  })
+
+  test.each([["no Retry-After", {}], ["a Retry-After that is not whole seconds", { "retry-after": "soon" }]])("a rate limit with %s has no wait", async (_label, headers) => {
+    const { fetch } = fakeFetch(() => new Response("", { status: 429, headers }))
     expect(await slackApi(sources({}, fetch)).call("auth.test", {})).toEqual({ ok: false, error: "ratelimited" })
   })
 

@@ -36,6 +36,8 @@ export function defaultRules(access: Access = "all"): Rule[] {
     // The tools RPC's status method reads only the plugin's own status and the signed-in account's ids.
     rule(`${SERVER}_${STATUS_METHOD}`, "allow"),
     ...OTHER_TOOLS.map((tool) => rule(`${SERVER}_${tool}`, other)),
+    // The plugin's own mentions_list and dms_list have no rule of their own: like the private search, they read direct
+    // messages and private channels, so the namespace rule above decides them.
     // The plugin's own mark_read is a write: it changes the user's read state in Slack.
     rule(`${SERVER}_${MARK_READ}`, other),
   ]

@@ -9,10 +9,13 @@ All notable changes to this project are documented here. The format follows [Kee
 - Status's `account` (`teamId`, `userId`, `enterpriseId`), from one `auth.test` per sign-in; absent on failure. Shown in the `Account` row.
 - The tools RPC's `status` method (`slack_status`, allowed at every `access`).
 - `slack_mark_read` / `mark_read` (write): Slack's `conversations.mark`. Needs a `:write` scope; `SCOPE_MISSING` without it. Default scopes unchanged.
+- `slack_mentions_list` / `mentions_list` (read, JSON): messages that mention the signed-in user since an ISO time, from `assistant.search.context`. Needs the private search's `search:read.*` scopes.
+- `slack_dms_list` / `dms_list` (read, JSON): direct and group messages with their latest message and unread state. Needs `im:read`, `mpim:read`, `im:history`, `mpim:history` and `users:read`.
+- Slack's `Retry-After` on a rate limit: the JSON reads wait up to 30 seconds and try again, at most twice.
 
 ### Changed
 
-- **The plugin reads the Slack token in one place**, `src/slack-api.ts`, only for `auth.test` and `conversations.mark`, and never stores, logs or returns it.
+- **The plugin reads the Slack token in one place**, `src/slack-api.ts`, only for `auth.test`, `conversations.mark` and the reads of `mentions_list` and `dms_list`, and never stores, logs or returns it.
 
 ## [0.0.0] - 2026-11-10
 <!-- kit-release: the GitHub release v0.0.0 -->

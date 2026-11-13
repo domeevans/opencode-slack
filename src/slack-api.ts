@@ -13,8 +13,21 @@ import { SERVER } from "./defaults.js"
 
 export const SLACK_API_URL = "https://slack.com/api/"
 
-/** The only Web API methods the plugin calls: who signed in (status), and marking a conversation read (`mark_read`). */
-export const SLACK_API_METHODS = ["auth.test", "conversations.mark"] as const
+/**
+ * The only Web API methods the plugin calls: who signed in (status), marking a conversation read (`mark_read`), the
+ * search for the user's mentions (`mentions_list`), and the reads of the user's direct and group messages (`dms_list`).
+ * Every method but `conversations.mark` only reads.
+ */
+export const SLACK_API_METHODS = [
+  "auth.test",
+  "conversations.mark",
+  "assistant.search.context",
+  "users.conversations",
+  "conversations.info",
+  "conversations.history",
+  "conversations.members",
+  "users.info",
+] as const
 export type SlackApiMethod = (typeof SLACK_API_METHODS)[number]
 
 /** No usable Slack sign-in: no server of the plugin's, no active connection, or no OAuth token in it. */
@@ -41,7 +54,7 @@ export interface SlackApiSources {
 
 export type SlackApiResult =
   | { readonly ok: true; readonly credential: string; readonly body: Readonly<Record<string, unknown>> }
-  | { readonly ok: false; readonly error: string; readonly needed?: string }
+  | { readonly ok: false; readonly error: string; readonly needed?: string; readonly retryAfter?: number }
 
 export interface SlackApi {
   /** The id of the active Slack sign-in's credential, or undefined without one. Reads no token. */
@@ -110,6 +123,7 @@ export function slackApi(sources: SlackApiSources): SlackApi {
       const timeout = AbortSignal.timeout(TIMEOUT_MS)
       const stop = signal === undefined ? timeout : AbortSignal.any([signal, timeout])
       let status: number
+      let retryAfter: string | null = null
       let body: unknown
       try {
         const response = await raced((sources.fetch ?? globalThis.fetch)(`${SLACK_API_URL}${method}`, {
@@ -120,11 +134,16 @@ export function slackApi(sources: SlackApiSources): SlackApi {
           signal: stop,
         }), stop)
         status = response.status
+        retryAfter = response.headers.get("retry-after")
         body = status === 429 ? undefined : await raced(response.json() as Promise<unknown>, stop).catch(() => undefined)
       } catch {
         return { ok: false, error: REQUEST_FAILED }
       }
-      if (status === 429) return { ok: false, error: "ratelimited" }
+      if (status === 429) {
+        // Slack's Retry-After is whole seconds; anything else is left out.
+        const seconds = retryAfter !== null && /^\d{1,5}$/.test(retryAfter.trim()) ? Number(retryAfter.trim()) : undefined
+        return seconds === undefined ? { ok: false, error: "ratelimited" } : { ok: false, error: "ratelimited", retryAfter: seconds }
+      }
       if (!isRecord(body) || typeof body["ok"] !== "boolean") return { ok: false, error: REQUEST_FAILED }
       if (body["ok"]) return { ok: true, credential: found.id, body: scrub(body) as Record<string, unknown> }
       const error = typeof body["error"] === "string" && SLACK_CODE.test(body["error"]) ? body["error"] : REQUEST_FAILED

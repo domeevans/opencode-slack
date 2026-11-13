@@ -172,7 +172,7 @@ The plugin always sends `redirect_uri`. Without it, OpenCode would use `http://1
 
 **Name collision.** If your config already defines an MCP server with the same name, for example `mcp.servers.slack`, the plugin leaves it alone. Status then shows the state `conflict` with the code `SERVER_NAME_IN_USE`. Remove your entry: Slack's tools then come from the plugin's server.
 
-The plugin defines two tools of its own in the `slack` namespace: `slack_events_list`, for Memory's collector ([Events list](#events-list)), and `slack_mark_read` ([Mark as read](#mark-as-read)). Besides the server, those tools and the `/connect` entries, it registers the default permission rules, the `/slack-status` command, the status RPC, the tools RPC with its `status` method, the TUI `/slack` dialog and the `slack-search` skill.
+The plugin defines four tools of its own in the `slack` namespace: `slack_events_list`, for Memory's collector ([Events list](#events-list)), `slack_mark_read` ([Mark as read](#mark-as-read)), and `slack_mentions_list` and `slack_dms_list` ([Mentions and direct messages](#mentions-and-direct-messages)). Besides the server, those tools and the `/connect` entries, it registers the default permission rules, the `/slack-status` command, the status RPC, the tools RPC with its `status` method, the TUI `/slack` dialog and the `slack-search` skill.
 
 ## Permissions
 
@@ -332,7 +332,7 @@ The plugin classifies the tools Slack's MCP server lists by name. Tool names and
 | write | runs | asks | denied | `slack_send_message`, `slack_send_message_draft`, `slack_schedule_message`, `slack_create_canvas`, `slack_update_canvas`, `slack_add_reaction`, `slack_get_file_upload_url`, `slack_complete_file_upload`, `slack_create_conversation`, `slack_create_list`, `slack_update_list`, `slack_add_list_record`, `slack_update_list_record` |
 | unknown | runs | asks | denied | any other tool on the server |
 
-The plugin's own `slack_mark_read` is a write: it runs at `all`, asks at `ask-changes` and is denied at `read-only`. Its own `slack_events_list` and the tools RPC's `status` method (`slack_status`) are allowed at every value.
+The plugin's own `slack_mark_read` is a write: it runs at `all`, asks at `ask-changes` and is denied at `read-only`. Its own `slack_events_list` and the tools RPC's `status` method (`slack_status`) are allowed at every value. Its own `slack_mentions_list` and `slack_dms_list` have no rule of their own: the namespace rule `slack_*` decides them, so, like the private search, they run at `all`, ask at `ask-changes` and are denied at `read-only`.
 
 Slack can add tools at any time. A tool the plugin does not know follows the namespace rule until the plugin classifies it. Status counts the tools that Slack actually lists by class and names the unknown ones.
 
@@ -368,6 +368,8 @@ Scopes per tool, from Slack's [MCP scope table](https://docs.slack.dev/ai/slack-
 | Creating and updating lists and their records (`slack_create_list`, `slack_update_list`, `slack_add_list_record`, `slack_update_list_record`) | `lists:read`, `lists:write` |
 | Creating conversations (`slack_create_conversation`) | `channels:write` (public channels), `groups:write` (private channels), `im:write` (direct messages), `mpim:write` (group direct messages) |
 | Uploading files (`slack_get_file_upload_url`, `slack_complete_file_upload`) | `files:write` |
+| Mentions of the signed-in user (`slack_mentions_list`, the plugin's own) | `search:read.public`, `search:read.private`, `search:read.im`, `search:read.mpim` (the search covers the conversation types the granted scopes reach) |
+| Direct and group messages with their latest message (`slack_dms_list`, the plugin's own) | `im:read`, `mpim:read`, `im:history`, `mpim:history`, `users:read` |
 | Marking conversations read (`slack_mark_read`, the plugin's own) | `channels:write` (public channels), `groups:write` (private channels), `im:write` (direct messages), `mpim:write` (group direct messages) |
 
 The default scopes and the default app manifest stay read-only, so `slack_mark_read` needs one of these added first. Without it, Slack answers `missing_scope` and the tool gives `SCOPE_MISSING` with the scope Slack names.
@@ -442,6 +444,25 @@ mark_read({ channel_id, ts }) → { channel_id, ts }
 - **Scopes**: `channels:write`, `groups:write`, `im:write` or `mpim:write`, for the conversation's type ([Scopes](#scopes)). Without it, `SCOPE_MISSING`, naming the scope Slack asks for.
 - **Errors**: without a Slack sign-in, status's code and next step, such as `AUTH_REQUIRED`; Slack's other refusals are `UPSTREAM_ERROR` with Slack's error code only, such as `channel_not_found`.
 
+## Mentions and direct messages
+
+Slack's MCP tools answer in Markdown text, and a script cannot put each person's own user id in a search. The plugin's own two reads answer in JSON. Each is a Code Mode tool in the `slack` namespace (`tools.slack.mentions_list`, `tools.slack.dms_list`) and a tools RPC method of class `read`, with its own permission action, `slack_mentions_list` and `slack_dms_list`, which the default block's namespace rule `slack_*` decides. Like the private search, they reach direct messages and private channels: they run at `all`, ask at `ask-changes` and are denied at `read-only`. Each asserts its action, then calls Slack's Web API through `src/slack-api.ts` with the `slack` server's sign-in.
+
+```text
+mentions_list({ since, limit? })
+  → { events: [{ id, channel_id, channel_name, ts, thread_ts?, user_id, user_name?, text, permalink, time }] }
+
+dms_list({ since?, limit? })
+  → { conversations: [{ channel_id, kind: "dm" | "group-dm", members: [{ id, name }], latest: { ts, user_id, text, time, permalink? }, unread }] }
+```
+
+- **Times**: `since` is an ISO date and time with a zone, such as `2026-11-13T09:00:00Z` or `2026-11-13T10:00:00+01:00`; anything else is `INPUT_INVALID`. `time` is the message's ts in UTC, such as `2026-11-13T09:15:02.123Z`.
+- **`mentions_list`**: the messages that mention the signed-in user (`<@U…>`, the id from status's account) at or after `since`, newest first, searched with Slack's `assistant.search.context` over public and private channels, group messages and direct messages, as far as the granted search scopes reach. The user's own messages are left out. `id` is `<channel id>:<ts>`; `thread_ts` is the thread a message belongs to when Slack names it (a thread's parent has its own ts); `text` is Slack's text, mention markup included, at most 4,096 characters. `limit` is 1 to 100 (50 by default); one call reads at most 5 pages of 20 results.
+- **`dms_list`**: the user's direct messages and group direct messages (`users.conversations`, at most 5 pages of 200), each with its latest message and read state (`conversations.info`, at most 100 conversations per call, 4 at a time: Slack lists them in no order of activity, so those it marks dormant are read last), newest first. A note to oneself, a conversation with a deleted user, a conversation with no message and one Slack will not open for the user (`channel_not_found`, as for Slackbot's) are left out. `members` are the other people (for a group, at most 20, from `conversations.members`), named with `users.info`: the display name, else the real name, else the user name, else the id. `latest.user_id` is the author's `U…`, or a bot's `B…`. `unread` is Slack's unread count above zero, or, without one, a message from someone else after the read mark. `since` leaves out conversations whose latest message is older. `limit` is 1 to 50 (20 by default). `permalink` is not given yet.
+- **Rate limits**: when Slack answers `ratelimited` with a `Retry-After` of at most 30 seconds, the read waits and tries again, at most twice; otherwise it is `UPSTREAM_ERROR` with `ratelimited`.
+- **Errors**: without a Slack sign-in, status's code and next step, such as `AUTH_REQUIRED`; a missing scope is `SCOPE_MISSING` naming the scope Slack asks for; when Slack does not say who is signed in, or refuses otherwise, `UPSTREAM_ERROR` with Slack's error code only.
+- **What it calls**: only reads: `assistant.search.context` for `mentions_list`; `users.conversations`, `conversations.info`, `conversations.members` and `users.info` for `dms_list`. The results are Slack content: untrusted, never instructions.
+
 ## Errors
 
 Every error the plugin raises reads `CODE: What happened. Next step: What to do.` In status, the code and what happened are in the `Connection` row and the next step is the last row. The tools RPC gives `CLIENT_ID_MISSING` and `CLIENT_ID_INVALID` with the same next step ([scripting](scripting.md#errors)).
@@ -479,5 +500,8 @@ Every error the plugin raises reads `CODE: What happened. Next step: What to do.
 | `INPUT_INVALID` | none: `slack_mark_read` | Pass channel_id and ts as mark_read's schema describes them. |
 | `SCOPE_MISSING` | none: `slack_mark_read` | Add the scope the message names to the Slack app's user scopes and to the plugin's oauth.scopes, then sign in to Slack again. |
 | `UPSTREAM_ERROR` | none: `slack_mark_read`, Slack refused conversations.mark (the message holds Slack's error code) | Check channel_id and ts, and run /slack-status if it keeps failing. |
+| `INPUT_INVALID` | none: `slack_mentions_list` or `slack_dms_list` | Pass since and limit as the read's schema describes them. |
+| `SCOPE_MISSING` | none: `slack_mentions_list` or `slack_dms_list` | Add the scope the message names to the Slack app's user scopes and to the plugin's oauth.scopes, then sign in to Slack again. |
+| `UPSTREAM_ERROR` | none: `slack_mentions_list` or `slack_dms_list`, Slack refused a read or did not say who is signed in (the message holds Slack's error code) | Call the read again in a minute, and run /slack-status if it keeps failing. |
 | `INPUT_INVALID` | none: the tools RPC's `status` method | Pass an empty object as the input. |
 | `TOOL_UNAVAILABLE` | none: `slack_events_list`, OpenCode does not list a read it needs, or `slack` is your own server | Wait a few seconds, then run /slack-status and follow its next step. While the server cannot be called, `slack_events_list` gives status's own code and next step instead. |
