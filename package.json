@@ -272,6 +272,18 @@
         "permission": "slack_mark_read",
         "effect": "allow",
         "readOnly": false
+      },
+      {
+        "name": "slack.mentions_list",
+        "permission": "slack_mentions_list",
+        "effect": "allow",
+        "readOnly": true
+      },
+      {
+        "name": "slack.dms_list",
+        "permission": "slack_dms_list",
+        "effect": "allow",
+        "readOnly": true
       }
     ],
     "skills": [

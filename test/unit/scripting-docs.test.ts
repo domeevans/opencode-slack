@@ -7,7 +7,9 @@ import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { EVENTS_INPUT } from "../../src/events.js"
 import { METHODS, TOOLS_RPC_ID } from "../../src/host/tools-rpc.js"
+import { DMS_INPUT } from "../../src/dms.js"
 import { MARK_READ_INPUT } from "../../src/mark-read.js"
+import { MENTIONS_INPUT } from "../../src/mentions.js"
 import { parameters, SLACK_SCHEMAS } from "../host/slack-catalog.js"
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url))
@@ -18,6 +20,8 @@ const OWN_INPUTS: Readonly<Record<string, { properties: Record<string, unknown>;
   events_list: EVENTS_INPUT as never,
   mark_read: MARK_READ_INPUT as never,
   status: { properties: {}, required: [] },
+  mentions_list: MENTIONS_INPUT as never,
+  dms_list: DMS_INPUT as never,
 }
 
 interface Example {

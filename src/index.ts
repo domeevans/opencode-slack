@@ -5,7 +5,10 @@ import { isSupportedHost, isTestedHost } from "./host-version.js"
 import { METHODS, registerToolsRpc } from "./host/tools-rpc.js"
 import { eventsMethod, eventsTool, type EventsToolOptions } from "./events.js"
 import { workspaceIdentity } from "./identity.js"
+import { DMS_SPEC } from "./dms.js"
 import { markReadMethod, markReadTool, type MarkReadOptions } from "./mark-read.js"
+import { MENTIONS_SPEC } from "./mentions.js"
+import { readMethod, readTool, type ReadOptions } from "./web-reads.js"
 import { slackApi } from "./slack-api.js"
 import { statusMethod } from "./status-method.js"
 import { parseOptions } from "./options.js"
@@ -64,11 +67,16 @@ export default Plugin.define({
     const events: EventsToolOptions | undefined = options === undefined
       ? undefined
       : { tool: ctx.tool, permission: ctx.permission, channels: options.channels, owned: () => !nameInUse, status: () => status() }
-    // The one Slack Web API client, the only code that reads the Slack token: auth.test for status's account, and
-    // conversations.mark for mark_read. It uses only the plugin's own server's sign-in.
+    // The one Slack Web API client, the only code that reads the Slack token: auth.test for status's account,
+    // conversations.mark for mark_read, and the reads of mentions_list and dms_list. It uses only the plugin's own
+    // server's sign-in.
     const api = slackApi({ mcp: ctx.mcp, connection: ctx.integration.connection, owned: () => options !== undefined && !nameInUse })
     const identity = workspaceIdentity(api)
     const marking: MarkReadOptions | undefined = options === undefined ? undefined : { permission: ctx.permission, api, status: () => status() }
+    // The structured reads take the signed-in user's id from status's auth.test.
+    const reading: ReadOptions | undefined = options === undefined
+      ? undefined
+      : { permission: ctx.permission, api, identity: () => identity.get(), status: () => status() }
 
     if (options !== undefined) {
       const fromConnect = options.clientId === undefined
@@ -82,6 +90,8 @@ export default Plugin.define({
         editor.namespace({ name: SERVER, description: NAMESPACE_DESCRIPTION })
         editor.add(eventsTool(events!))
         editor.add(markReadTool(marking!))
+        editor.add(readTool(MENTIONS_SPEC, reading!))
+        editor.add(readTool(DMS_SPEC, reading!))
       })
       await ctx.agent.transform((editor) => insertDefaultRules(editor, options.access))
       const skills = await loadSkills()
@@ -175,9 +185,16 @@ export default Plugin.define({
     const stopTools = options === undefined
       ? async () => {}
       : await registerToolsRpc(ctx, {
-        methods: events === undefined || marking === undefined
+        methods: events === undefined || marking === undefined || reading === undefined
           ? METHODS
-          : [...METHODS, eventsMethod(events), markReadMethod(marking), statusMethod(() => status())],
+          : [
+            ...METHODS,
+            eventsMethod(events),
+            markReadMethod(marking),
+            statusMethod(() => status()),
+            readMethod(MENTIONS_SPEC, reading),
+            readMethod(DMS_SPEC, reading),
+          ],
         mcp: {
           server: SERVER,
           managed: () => !nameInUse,
